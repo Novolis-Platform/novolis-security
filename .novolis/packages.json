@@ -1,0 +1,14 @@
+{
+  "packages": {
+    "Novolis.Security": {
+      "paths": [
+        "src/Novolis.Security/**",
+        "tests/**",
+        "Directory.Build.props",
+        "Directory.Packages.props",
+        "global.json"
+      ],
+      "project": "src/Novolis.Security/Novolis.Security.csproj"
+    }
+  }
+}
