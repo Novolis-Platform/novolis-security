@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using FluentAssertions;
 using Novolis.Security.PasswordHashing;
 using Microsoft.Extensions.Options;
+using TUnit.Core;
 
 namespace Novolis.Security.Tests;
 
@@ -12,7 +12,7 @@ public class PasswordHasherTests
     [Arguments("password", 256)]
     [Arguments("password", 512)]
     [Arguments("password", 1024)]
-    public void HashPassword(string password, int iterations)
+    public async Task HashPassword(string password, int iterations)
     {
         var options = Options.Create(new PasswordHasherOptions { Iterations = iterations });
         var hasher = new PasswordHasher(options);
@@ -24,8 +24,8 @@ public class PasswordHasherTests
 
         var result = hasher.CompareHashedPassword(hash, password);
 
-        hash.Should().NotBeNullOrEmpty();
-        result.Should().BeTrue();
+        await Assert.That(hash).IsNotNullOrEmpty();
+        await Assert.That(result).IsTrue();
         TestContext.Current?.OutputWriter.WriteLine($"Hashing took {stopwatch.ElapsedMilliseconds} ms for {iterations} iterations.");
     }
 }

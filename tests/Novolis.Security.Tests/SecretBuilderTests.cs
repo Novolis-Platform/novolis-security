@@ -1,18 +1,18 @@
-using FluentAssertions;
 using Novolis.Security.Secrets;
+using TUnit.Core;
 
 namespace Novolis.Security.Tests;
 
 public class SecretBuilderTests
 {
     [Test]
-    public void GenerateFromSettings_ShouldCreateCharsetSecret()
+    public async Task GenerateFromSettings_ShouldCreateCharsetSecret()
     {
         var options = new SecretGeneratorOptions();
         var secret = SecretBuilder.GenerateFromSettings(options);
 
-        secret.Should().NotBeNullOrEmpty();
-        secret.Length.Should().Be(options.Length);
+        await Assert.That(secret).IsNotNullOrEmpty();
+        await Assert.That(secret.Length).IsEqualTo(options.Length);
         TestContext.Current?.OutputWriter.WriteLine($"Generated secret: {secret}");
     }
 }

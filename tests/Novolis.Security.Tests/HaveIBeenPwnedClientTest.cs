@@ -1,8 +1,8 @@
-using FluentAssertions;
 using Novolis.Security.HaveIBeenPwned;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Novolis.Testing.Logging;
+using TUnit.Core;
 
 namespace Novolis.Security.Tests;
 
@@ -25,6 +25,6 @@ public class HaveIBeenPwnedClientTest
     public async Task CheckPassword_PwnedPassword_ReturnsTrue()
     {
         var client = _services.GetRequiredService<IHaveIBeenPwnedClient>();
-        (await client.IsPwnedAsync("password")).Should().BeTrue();
+        await Assert.That(await client.IsPwnedAsync("password")).IsTrue();
     }
 }

@@ -1,12 +1,12 @@
-using FluentAssertions;
 using Novolis.Security.Secrets;
+using TUnit.Core;
 
 namespace Novolis.Security.Tests;
 
 public class PassphraseBuilderTests
 {
     [Test]
-    public void Build_WithDefaultWordLists_ShouldCreatePassphrase()
+    public async Task Build_WithDefaultWordLists_ShouldCreatePassphrase()
     {
         var passphrase = new PassphraseBuilder(4)
             .IncludeNouns()
@@ -15,17 +15,17 @@ public class PassphraseBuilderTests
             .Shuffle()
             .Build();
 
-        passphrase.Should().NotBeNullOrWhiteSpace();
-        passphrase.Split(' ').Should().HaveCount(4);
+        await Assert.That(passphrase).IsNotNullOrWhiteSpace();
+        await Assert.That(passphrase.Split(' ').Length).IsEqualTo(4);
     }
 
     [Test]
-    public void GenerateWordPassphrase_ShouldMatchBuilderDefaults()
+    public async Task GenerateWordPassphrase_ShouldMatchBuilderDefaults()
     {
         var generator = new SecretGenerator();
         var passphrase = generator.GenerateWordPassphrase();
 
-        passphrase.Should().NotBeNullOrWhiteSpace();
-        passphrase.Split(' ').Should().HaveCount(4);
+        await Assert.That(passphrase).IsNotNullOrWhiteSpace();
+        await Assert.That(passphrase.Split(' ').Length).IsEqualTo(4);
     }
 }
