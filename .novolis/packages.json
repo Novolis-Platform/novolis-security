@@ -1,14 +1,12 @@
 {
   "packages": {
-    "Novolis.Security": {
-      "paths": [
-        "src/Novolis.Security/**",
-        "tests/**",
-        "Directory.Build.props",
-        "Directory.Packages.props",
-        "global.json"
-      ],
-      "project": "src/Novolis.Security/Novolis.Security.csproj"
+    "Novolis.Security.Cryptography": {
+      "project": "src/Novolis.Security.Cryptography/Novolis.Security.Cryptography.csproj",
+      "paths": ["src/Novolis.Security.Cryptography/**", "src/Novolis.Security.Resources/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.HaveIBeenPwned": {
+      "project": "src/Novolis.Security.HaveIBeenPwned/Novolis.Security.HaveIBeenPwned.csproj",
+      "paths": ["src/Novolis.Security.HaveIBeenPwned/**", "Novolis.Security.slnx"]
     }
   }
 }
