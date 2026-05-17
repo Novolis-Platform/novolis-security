@@ -1,4 +1,4 @@
-namespace Novolis.Security.Resources;
+namespace Novolis.Security.WordLists;
 
 public static class Countries
 {

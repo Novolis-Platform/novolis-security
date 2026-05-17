@@ -11,7 +11,7 @@ public class HaveIBeenPwnedClient(IHttpClientFactory clientFactory, ILogger<Have
         var passwordDetails = await GetPasswordDetailsAsync(hash);
         passwordDetails = passwordDetails.ToArray();
         if (!passwordDetails.Any()) return false;
-        var passwordDetail = passwordDetails.FirstOrDefault(details => details.Sha2Suffix == hash.Suffix);
+        var passwordDetail = passwordDetails.FirstOrDefault(details => details.Sha1Suffix == hash.Suffix);
         
         if (passwordDetail == null) return false;
 
@@ -41,7 +41,7 @@ public class HaveIBeenPwnedClient(IHttpClientFactory clientFactory, ILogger<Have
         {
             Sha1Hash = string.Concat(prefix, pair.Key),
             Sha1Prefix = prefix,
-            Sha2Suffix = pair.Key,
+            Sha1Suffix = pair.Key,
             TimesPwned = pair.Value ?? 0,
         };
         return output;

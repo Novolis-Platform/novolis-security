@@ -1,4 +1,4 @@
-namespace Novolis.Security.Resources;
+namespace Novolis.Security.WordLists;
 
 /// <summary>
 /// The Characters class provides utility methods and predefined collections of characters.

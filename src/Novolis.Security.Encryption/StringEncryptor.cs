@@ -1,31 +1,32 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 
-namespace Novolis.Security.Cryptography;
+namespace Novolis.Security.Encryption;
 
-public class StringEncryptor(IOptions<StringEncryptorOptions> _options)
+public class StringEncryptor(IOptions<StringEncryptorOptions> options)
 {
-    public string Encrypt(string value, Guid key, StringEncryptorOptions? options = null)
+    public string Encrypt(string value, Guid key, StringEncryptorOptions? encryptOptions = null)
     {
-        options ??= _options.Value;
+        encryptOptions ??= options.Value;
         var keyBytes = key.ToByteArray();
-        using var aes = GetAes(options);
+        using var aes = GetAes(encryptOptions);
         using var encryptor = aes.CreateEncryptor(keyBytes, aes.IV);
         var ms = new MemoryStream();
-        ms.Write(aes.IV, 0, 16); // write the IV to the MemoryStream directly before the CryptoStream is created
+        ms.Write(aes.IV, 0, 16);
         using var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write);
-        using (var sw = new StreamWriter(cs)) sw.Write(value);
+        using (var sw = new StreamWriter(cs))
+            sw.Write(value);
         if (!cs.HasFlushedFinalBlock)
             cs.FlushFinalBlock();
         return Convert.ToBase64String(ms.ToArray());
     }
-        
-    public string Decrypt(string value, Guid key, StringEncryptorOptions? options = null)
+
+    public string Decrypt(string value, Guid key, StringEncryptorOptions? decryptOptions = null)
     {
-        options ??= _options.Value;
+        decryptOptions ??= options.Value;
         var keyBytes = key.ToByteArray();
         var bytes = Convert.FromBase64String(value);
-        using var aes = GetAes(options);
+        using var aes = GetAes(decryptOptions);
         var iv = new byte[aes.BlockSize / 8];
         Array.Copy(bytes, 0, iv, 0, iv.Length);
         var encryptedBytes = new byte[bytes.Length - iv.Length];
@@ -37,13 +38,13 @@ public class StringEncryptor(IOptions<StringEncryptorOptions> _options)
         return sr.ReadToEnd();
     }
 
-    private static Aes GetAes(StringEncryptorOptions options)
+    private static Aes GetAes(StringEncryptorOptions encryptOptions)
     {
         var aes = Aes.Create();
         aes.GenerateIV();
-        aes.KeySize = options.KeySize;
-        aes.BlockSize = options.BlockSize;
-        aes.Padding = options.Padding;
+        aes.KeySize = encryptOptions.KeySize;
+        aes.BlockSize = encryptOptions.BlockSize;
+        aes.Padding = encryptOptions.Padding;
         return aes;
     }
 }

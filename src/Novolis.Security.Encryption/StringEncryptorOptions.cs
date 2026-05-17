@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace Novolis.Security.Cryptography;
+namespace Novolis.Security.Encryption;
 
 public class StringEncryptorOptions
 {

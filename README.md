@@ -1,21 +1,36 @@
 # Security
 
-## What it is
+Cryptography, secret generation, password hashing, and breach-checking libraries for the Novolis platform.
 
-Security in the Novolis ecosystem.
+## Packages
 
-## Current status
+| Package | Purpose |
+|---------|---------|
+| `Novolis.Security.Secrets` | Charset secrets and word passphrases (`ISecretGenerator`) |
+| `Novolis.Security.PasswordHashing` | PBKDF2 password storage hashing |
+| `Novolis.Security.Encryption` | Reversible AES string encryption |
+| `Novolis.Security.HaveIBeenPwned` | Pwned Passwords range API client |
 
-This repository is reserved for the Novolis Security package.
-Implementation will be migrated or built in later steps.
+`Novolis.Security.WordLists` is an internal dependency (embedded word/character lists).
 
 ## Install
 
-Not yet published.
+```bash
+dotnet add package Novolis.Security.Secrets --version 0.1.0-preview.1
+dotnet add package Novolis.Security.PasswordHashing --version 0.1.0-preview.1
+dotnet add package Novolis.Security.Encryption --version 0.1.0-preview.1
+dotnet add package Novolis.Security.HaveIBeenPwned --version 0.1.0-preview.1
+```
 
 ## Quick start
 
-Not yet available.
+```csharp
+using Novolis.Security.Secrets;
+
+var secrets = new SecretGenerator();
+var apiKey = secrets.GenerateCharsetSecret();
+var passphrase = secrets.GenerateWordPassphrase();
+```
 
 ## Documentation
 

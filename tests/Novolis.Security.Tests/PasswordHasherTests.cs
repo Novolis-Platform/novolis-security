@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using FluentAssertions;
-using Novolis.Security.Cryptography;
+using Novolis.Security.PasswordHashing;
 using Microsoft.Extensions.Options;
 
 namespace Novolis.Security.Tests;

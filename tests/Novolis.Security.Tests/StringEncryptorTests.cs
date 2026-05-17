@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Novolis.Security.Cryptography;
+using Novolis.Security.Encryption;
 using Microsoft.Extensions.Options;
 
 namespace Novolis.Security.Tests;

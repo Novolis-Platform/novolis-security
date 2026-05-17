@@ -1,7 +1,9 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Novolis.Security.Resources/Novolis.Security.Resources.csproj" />
-    <Project Path="src/Novolis.Security.Cryptography/Novolis.Security.Cryptography.csproj" />
+    <Project Path="src/Novolis.Security.WordLists/Novolis.Security.WordLists.csproj" />
+    <Project Path="src/Novolis.Security.Secrets/Novolis.Security.Secrets.csproj" />
+    <Project Path="src/Novolis.Security.PasswordHashing/Novolis.Security.PasswordHashing.csproj" />
+    <Project Path="src/Novolis.Security.Encryption/Novolis.Security.Encryption.csproj" />
     <Project Path="src/Novolis.Security.HaveIBeenPwned/Novolis.Security.HaveIBeenPwned.csproj" />
   </Folder>
   <Folder Name="/tests/"><Project Path="tests/Novolis.Security.Tests/Novolis.Security.Tests.csproj" /></Folder>

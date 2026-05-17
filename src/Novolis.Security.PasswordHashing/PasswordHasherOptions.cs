@@ -1,4 +1,4 @@
-namespace Novolis.Security.Cryptography;
+namespace Novolis.Security.PasswordHashing;
 
 public class PasswordHasherOptions
 {

@@ -1,4 +1,4 @@
-namespace Novolis.Security.Resources;
+namespace Novolis.Security.WordLists;
 
 /// <summary>
 /// List of english nouns. Some have spaces, some have hyphens, some have apostrophes.

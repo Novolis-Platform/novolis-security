@@ -1,8 +1,7 @@
-using System.Security.Authentication;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 
-namespace Novolis.Security.Cryptography;
+namespace Novolis.Security.PasswordHashing;
 
 public class PasswordHasher(IOptions<PasswordHasherOptions> options)
 {
@@ -15,7 +14,7 @@ public class PasswordHasher(IOptions<PasswordHasherOptions> options)
         hash.CopyTo(hashBytes.AsSpan(options.Value.SaltSize));
         return Convert.ToBase64String(hashBytes);
     }
-    
+
     public bool CompareHashedPassword(string hashedPassword, string password)
     {
         var hashBytes = Convert.FromBase64String(hashedPassword);
@@ -24,12 +23,14 @@ public class PasswordHasher(IOptions<PasswordHasherOptions> options)
         var passwordHash = HashPassword(password, salt);
         return passwordHash.SequenceEqual(hash);
     }
-    
-    private ReadOnlySpan<byte> HashPassword(string password, ReadOnlySpan<byte> salt)
-    {
-        using var bytes = new PasswordDeriveBytes(password, salt.ToArray(), HashAlgorithmType.Sha512.ToString().ToUpperInvariant(), options.Value.Iterations);
-        return bytes.GetBytes(options.Value.KeySize);
-    }
 
-    private ReadOnlySpan<byte> GenerateSalt() => RandomNumberGenerator.GetBytes(options.Value.SaltSize);
+    private byte[] HashPassword(string password, ReadOnlySpan<byte> salt) =>
+        Rfc2898DeriveBytes.Pbkdf2(
+            password,
+            salt,
+            options.Value.Iterations,
+            HashAlgorithmName.SHA512,
+            options.Value.KeySize);
+
+    private byte[] GenerateSalt() => RandomNumberGenerator.GetBytes(options.Value.SaltSize);
 }

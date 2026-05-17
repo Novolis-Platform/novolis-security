@@ -4,6 +4,13 @@ public class PasswordDetails
 {
     public uint TimesPwned { get; set; } = 0;
     public string Sha1Prefix { get; set; } = string.Empty;
-    public string Sha2Suffix { get; set; } = string.Empty;
+    public string Sha1Suffix { get; set; } = string.Empty;
+
+    [Obsolete("Use Sha1Suffix. This property was misnamed and will be removed in a future release.")]
+    public string Sha2Suffix
+    {
+        get => Sha1Suffix;
+        set => Sha1Suffix = value;
+    }
     public string Sha1Hash { get; set; } = string.Empty;
 }

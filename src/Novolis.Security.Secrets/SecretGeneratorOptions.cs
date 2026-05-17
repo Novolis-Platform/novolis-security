@@ -1,6 +1,6 @@
-namespace Novolis.Security.Cryptography;
+namespace Novolis.Security.Secrets;
 
-public class PasswordGeneratorOptions
+public class SecretGeneratorOptions
 {
     public int Length { get; set; } = 16;
     public bool IncludeUppercase { get; set; } = true;

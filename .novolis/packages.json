@@ -1,8 +1,16 @@
 {
   "packages": {
-    "Novolis.Security.Cryptography": {
-      "project": "src/Novolis.Security.Cryptography/Novolis.Security.Cryptography.csproj",
-      "paths": ["src/Novolis.Security.Cryptography/**", "src/Novolis.Security.Resources/**", "Novolis.Security.slnx"]
+    "Novolis.Security.Secrets": {
+      "project": "src/Novolis.Security.Secrets/Novolis.Security.Secrets.csproj",
+      "paths": ["src/Novolis.Security.Secrets/**", "src/Novolis.Security.WordLists/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.PasswordHashing": {
+      "project": "src/Novolis.Security.PasswordHashing/Novolis.Security.PasswordHashing.csproj",
+      "paths": ["src/Novolis.Security.PasswordHashing/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.Encryption": {
+      "project": "src/Novolis.Security.Encryption/Novolis.Security.Encryption.csproj",
+      "paths": ["src/Novolis.Security.Encryption/**", "Novolis.Security.slnx"]
     },
     "Novolis.Security.HaveIBeenPwned": {
       "project": "src/Novolis.Security.HaveIBeenPwned/Novolis.Security.HaveIBeenPwned.csproj",
