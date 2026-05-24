@@ -6,6 +6,7 @@ namespace Novolis.Security.WordLists;
 /// <remarks>Some words might be inapropriate</remarks>
 public static class Nouns
 {
+    /// <summary>Returns all words in this list.</summary>
     public static IEnumerable<string> Get() =>
         new HashSet<string>
         {

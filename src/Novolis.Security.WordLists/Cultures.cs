@@ -1,7 +1,10 @@
 namespace Novolis.Security.WordLists;
 
+/// <summary>Culture names for passphrase generation.</summary>
 public static class Cultures
 {
+    
+    /// <summary>Returns all words in this list.</summary>
     
     public static IEnumerable<string> Get() =>
         new HashSet<string>

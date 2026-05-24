@@ -1,7 +1,9 @@
 namespace Novolis.Security.WordLists;
 
+/// <summary>Country names for passphrase generation.</summary>
 public static class Countries
 {
+    /// <summary>Returns all words in this list.</summary>
     public static IEnumerable<string> Get() =>
         new HashSet<string>
         {

@@ -3,8 +3,10 @@ using Microsoft.Extensions.Options;
 
 namespace Novolis.Security.Encryption;
 
+/// <summary>AES string encryption with prepended IV.</summary>
 public class StringEncryptor(IOptions<StringEncryptorOptions> options)
 {
+    /// <summary>Encrypts a string with the given key.</summary>
     public string Encrypt(string value, Guid key, StringEncryptorOptions? encryptOptions = null)
     {
         encryptOptions ??= options.Value;
@@ -21,6 +23,7 @@ public class StringEncryptor(IOptions<StringEncryptorOptions> options)
         return Convert.ToBase64String(ms.ToArray());
     }
 
+    /// <summary>Decrypts a string produced by <see cref="Encrypt"/>.</summary>
     public string Decrypt(string value, Guid key, StringEncryptorOptions? decryptOptions = null)
     {
         decryptOptions ??= options.Value;

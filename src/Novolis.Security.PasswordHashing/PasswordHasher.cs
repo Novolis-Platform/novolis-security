@@ -3,8 +3,12 @@ using Microsoft.Extensions.Options;
 
 namespace Novolis.Security.PasswordHashing;
 
+/// <summary>PBKDF2 password hasher with configurable salt and key size.</summary>
 public class PasswordHasher(IOptions<PasswordHasherOptions> options)
 {
+    /// <summary>Hashes a password with a newly generated salt.</summary>
+    /// <param name="password">Plain-text password.</param>
+    /// <returns>Base64-encoded salt + hash bytes.</returns>
     public string HashPassword(string password)
     {
         var salt = GenerateSalt();
@@ -15,6 +19,10 @@ public class PasswordHasher(IOptions<PasswordHasherOptions> options)
         return Convert.ToBase64String(hashBytes);
     }
 
+    /// <summary>Verifies a password against a previously hashed value.</summary>
+    /// <param name="hashedPassword">Base64 hash from the parameterless hash method.</param>
+    /// <param name="password">Candidate plain-text password.</param>
+    /// <returns>True when the password matches.</returns>
     public bool CompareHashedPassword(string hashedPassword, string password)
     {
         var hashBytes = Convert.FromBase64String(hashedPassword);

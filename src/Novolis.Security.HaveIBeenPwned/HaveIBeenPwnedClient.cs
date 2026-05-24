@@ -3,8 +3,10 @@ using Microsoft.Extensions.Options;
 
 namespace Novolis.Security.HaveIBeenPwned;
 
+/// <summary>Default <see cref="IHaveIBeenPwnedClient"/> using the k-anonymity range API.</summary>
 public class HaveIBeenPwnedClient(IHttpClientFactory clientFactory, ILogger<HaveIBeenPwnedClient> logger, IOptions<HibpConfiguration> options) : IHaveIBeenPwnedClient
 {
+    /// <inheritdoc />
     public async Task<bool> IsPwnedAsync(string password, uint threshold = 0)
     {
         var hash = new Sha1Hash(password);
@@ -24,6 +26,7 @@ public class HaveIBeenPwnedClient(IHttpClientFactory clientFactory, ILogger<Have
         return false;
     }
 
+    /// <inheritdoc />
     public async Task<IEnumerable<PasswordDetails>> GetPasswordDetailsAsync(string password) => await GetPasswordDetailsAsync(new Sha1Hash(password));
     
     private async Task<IEnumerable<PasswordDetails>> GetPasswordDetailsAsync(Sha1Hash hash)
