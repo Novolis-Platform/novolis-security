@@ -6,5 +6,6 @@
     <Project Path="src/Novolis.Security.Encryption/Novolis.Security.Encryption.csproj" />
     <Project Path="src/Novolis.Security.HaveIBeenPwned/Novolis.Security.HaveIBeenPwned.csproj" />
   </Folder>
-  <Folder Name="/tests/"><Project Path="tests/Novolis.Security.Tests/Novolis.Security.Tests.csproj" /></Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Novolis.Security.Unit/Novolis.Security.Unit.csproj" /></Folder>
 </Solution>
