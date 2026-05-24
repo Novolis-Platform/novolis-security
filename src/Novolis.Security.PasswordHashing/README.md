@@ -1,6 +1,6 @@
 # Novolis.Security.PasswordHashing
 
-PBKDF2 password hashing.
+PBKDF2 password hashing and verification with configurable work factors.
 
 ## Install
 
@@ -13,8 +13,22 @@ dotnet add package Novolis.Security.PasswordHashing
 ## Quick start
 
 ```csharp
-// See docs/getting-started.md for integration examples.
+using Microsoft.Extensions.Options;
+using Novolis.Security.PasswordHashing;
+
+var hasher = new PasswordHasher(Options.Create(new PasswordHasherOptions()));
+string hash = hasher.HashPassword("correct horse battery staple");
+bool valid = hasher.CompareHashedPassword(hash, "correct horse battery staple");
 ```
+
+Register `IPasswordHasher` via DI in ASP.NET Core hosts for credential stores.
+
+## Related packages
+
+| Package | When to use |
+|---------|-------------|
+| `Novolis.Security.Secrets` | Generate initial passwords |
+| `Novolis.Security.HaveIBeenPwned` | Breach checks before accepting passwords |
 
 ## More documentation
 
@@ -23,4 +37,4 @@ dotnet add package Novolis.Security.PasswordHashing
 
 ## Support
 
-Pre-release. APIs may change between releases.
+Pre-release (`2026.1.*` on GitHub Packages).

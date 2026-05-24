@@ -1,6 +1,6 @@
 # Novolis.Security.Secrets
 
-Secret and passphrase generation.
+Cryptographically strong secrets and memorable passphrases built from Novolis word lists.
 
 ## Install
 
@@ -13,8 +13,27 @@ dotnet add package Novolis.Security.Secrets
 ## Quick start
 
 ```csharp
-// See docs/getting-started.md for integration examples.
+using Novolis.Security.Secrets;
+
+var gen = new SecretGenerator();
+string apiKey = gen.GenerateCharsetSecret(length: 32);
+string passphrase = gen.GenerateWordPassphrase(wordCount: 4);
+
+string custom = new PassphraseBuilder(wordCount: 5)
+    .IncludeNouns()
+    .IncludeAdjectives()
+    .Shuffle()
+    .Build();
 ```
+
+Hash passphrases with `Novolis.Security.PasswordHashing` before persistence.
+
+## Related packages
+
+| Package | When to use |
+|---------|-------------|
+| `Novolis.Security.WordLists` | Raw word list data |
+| `Novolis.Security.PasswordHashing` | PBKDF2 password storage |
 
 ## More documentation
 
@@ -23,4 +42,4 @@ dotnet add package Novolis.Security.Secrets
 
 ## Support
 
-Pre-release. APIs may change between releases.
+Pre-release (`2026.1.*` on GitHub Packages).

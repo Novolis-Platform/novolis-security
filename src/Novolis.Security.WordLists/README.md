@@ -1,6 +1,6 @@
 # Novolis.Security.WordLists
 
-Word lists for passphrase generation.
+Curated word lists (nouns, verbs, adjectives, countries, colors) for passphrase generation.
 
 ## Install
 
@@ -13,8 +13,22 @@ dotnet add package Novolis.Security.WordLists
 ## Quick start
 
 ```csharp
-// See docs/getting-started.md for integration examples.
+using Novolis.Security.WordLists;
+
+IEnumerable<string> nouns = Nouns.Get();
+IEnumerable<string> adjectives = Adjectives.Get();
+IEnumerable<char> digits = Characters.Digits;
+IEnumerable<string> verbs = Verbs.Get();
 ```
+
+Typically consumed via `Novolis.Security.Secrets` rather than referenced directly in apps.
+
+## Related packages
+
+| Package | When to use |
+|---------|-------------|
+| `Novolis.Security.Secrets` | `SecretGenerator` and `PassphraseBuilder` |
+| `Novolis.Security.PasswordHashing` | Store generated secrets safely |
 
 ## More documentation
 
@@ -23,4 +37,4 @@ dotnet add package Novolis.Security.WordLists
 
 ## Support
 
-Pre-release. APIs may change between releases.
+Pre-release (`2026.1.*` on GitHub Packages).

@@ -1,6 +1,6 @@
 # Novolis.Security.Encryption
 
-AES string encryption.
+AES string encryption and decryption with explicit key material.
 
 ## Install
 
@@ -13,8 +13,24 @@ dotnet add package Novolis.Security.Encryption
 ## Quick start
 
 ```csharp
-// See docs/getting-started.md for integration examples.
+using Microsoft.Extensions.Options;
+using Novolis.Security.Encryption;
+
+var encryptor = new StringEncryptor(Options.Create(new StringEncryptorOptions()));
+var key = Guid.NewGuid();
+
+string cipher = encryptor.Encrypt("payload", key);
+string plain = encryptor.Decrypt(cipher, key);
 ```
+
+Bind `StringEncryptorOptions` from configuration (`IOptions`) in production hosts.
+
+## Related packages
+
+| Package | When to use |
+|---------|-------------|
+| `Novolis.Security.Secrets` | Generate keys and tokens |
+| `Novolis.Security.PasswordHashing` | One-way password storage (not reversible encryption) |
 
 ## More documentation
 
@@ -23,4 +39,4 @@ dotnet add package Novolis.Security.Encryption
 
 ## Support
 
-Pre-release. APIs may change between releases.
+Pre-release (`2026.1.*` on GitHub Packages).
