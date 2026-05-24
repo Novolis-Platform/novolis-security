@@ -7,11 +7,13 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Novolis.Testing.Logging" />
     <PackageReference Include="TUnit" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Novolis.Security.Secrets\Novolis.Security.Secrets.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.PasswordHashing\Novolis.Security.PasswordHashing.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.Encryption\Novolis.Security.Encryption.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.HaveIBeenPwned\Novolis.Security.HaveIBeenPwned.csproj" />
-    <ProjectReference Include="..\..\..\novolis-testing\src\Novolis.Testing.Logging\Novolis.Testing.Logging.csproj" />
   </ItemGroup>
 </Project>
