@@ -10136,7 +10136,6 @@ public static class Nouns
             "desipramine",
             "desirability",
             "desire",
-            "desk",
             "desktop",
             "desmanthus",
             "desmid",
