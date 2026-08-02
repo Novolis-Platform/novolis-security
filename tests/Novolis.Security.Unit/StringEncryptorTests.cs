@@ -21,4 +21,17 @@ public class StringEncryptorTests
 
         await Assert.That(decrypted).IsEqualTo(original);
     }
+
+    [Test]
+    public async Task EncryptEmptyString_RoundTrips()
+    {
+        var options = Options.Create(new StringEncryptorOptions());
+        var stringEncryptor = new StringEncryptor(options);
+        var key = Guid.NewGuid();
+
+        var encrypted = stringEncryptor.Encrypt(string.Empty, key);
+        var decrypted = stringEncryptor.Decrypt(encrypted, key);
+
+        await Assert.That(decrypted).IsEqualTo(string.Empty);
+    }
 }
