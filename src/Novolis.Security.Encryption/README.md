@@ -1,3 +1,11 @@
+<!-- novolis-pkg-brand:start -->
+<p align="center">
+  <a href="https://github.com/Novolis-Platform/novolis-security">
+    <img src="https://raw.githubusercontent.com/Novolis-Platform/.github/main/brand/logo-icon.svg" width="72" alt="Novolis"/>
+  </a>
+</p>
+<!-- novolis-pkg-brand:end -->
+
 # Novolis.Security.Encryption
 
 AES string encryption and decryption with explicit key material.
@@ -40,3 +48,4 @@ Bind `StringEncryptorOptions` from configuration (`IOptions`) in production host
 ## Support
 
 Pre-release (`2026.1.*` on GitHub Packages).
+
