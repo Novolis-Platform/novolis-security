@@ -12,49 +12,49 @@ public class PassphraseBuilder(int wordCount)
     /// <summary>Adds the noun word list.</summary>
     public PassphraseBuilder IncludeNouns()
     {
-        _words.AddRange(Nouns.Get());
+        AddSingleTokenWords(Nouns.Get());
         return this;
     }
 
     /// <summary>Adds the adjective word list.</summary>
     public PassphraseBuilder IncludeAdjectives()
     {
-        _words.AddRange(Adjectives.Get());
+        AddSingleTokenWords(Adjectives.Get());
         return this;
     }
 
     /// <summary>Adds the verb word list.</summary>
     public PassphraseBuilder IncludeVerbs()
     {
-        _words.AddRange(Verbs.Get());
+        AddSingleTokenWords(Verbs.Get());
         return this;
     }
 
     /// <summary>Adds the adverb word list.</summary>
     public PassphraseBuilder IncludeAdverbs()
     {
-        _words.AddRange(Adverbs.Get());
+        AddSingleTokenWords(Adverbs.Get());
         return this;
     }
 
     /// <summary>Adds the country name list.</summary>
     public PassphraseBuilder IncludeCountries()
     {
-        _words.AddRange(Countries.Get());
+        AddSingleTokenWords(Countries.Get());
         return this;
     }
 
     /// <summary>Adds the culture name list.</summary>
     public PassphraseBuilder IncludeCultures()
     {
-        _words.AddRange(Cultures.Get());
+        AddSingleTokenWords(Cultures.Get());
         return this;
     }
 
     /// <summary>Adds the color name list.</summary>
     public PassphraseBuilder IncludeColorNames()
     {
-        _words.AddRange(ColorNames.Get());
+        AddSingleTokenWords(ColorNames.Get());
         return this;
     }
 
@@ -76,5 +76,18 @@ public class PassphraseBuilder(int wordCount)
         for (var index = 0; index < wordCount; index++)
             passphrase.Add(_words.GetRandom());
         return string.Join(" ", passphrase);
+    }
+
+    /// <summary>
+    /// Passphrases are space-delimited, so multi-token list entries
+    /// (e.g. adjective phrases) must not enter the sampling pool.
+    /// </summary>
+    private void AddSingleTokenWords(IEnumerable<string> words)
+    {
+        foreach (var word in words)
+        {
+            if (word.Length > 0 && !word.Contains(' '))
+                _words.Add(word);
+        }
     }
 }

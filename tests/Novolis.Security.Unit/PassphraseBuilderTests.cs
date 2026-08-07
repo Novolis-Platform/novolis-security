@@ -30,6 +30,19 @@ public class PassphraseBuilderTests
     }
 
     [Test]
+    public async Task GenerateWordPassphrase_ShouldNeverEmitMultiTokenWords()
+    {
+        var generator = new SecretGenerator();
+
+        // Adjectives include phrases with spaces; sampling must still yield exactly WordCount tokens.
+        for (var i = 0; i < 200; i++)
+        {
+            var passphrase = generator.GenerateWordPassphrase();
+            await Assert.That(passphrase.Split(' ').Length).IsEqualTo(4);
+        }
+    }
+
+    [Test]
     public async Task Build_WithAllWordLists_ShouldCreatePassphrase()
     {
         var passphrase = new PassphraseBuilder(5)
