@@ -2,16 +2,18 @@
 
 ## Scope
 
-Secure-text v1 protects one text conversation between two known devices. It separates
-cryptographic message protection from delivery: SignalR, Local IPC, TCP, HTTP/WebSocket, and
-Service Bus can carry the same opaque envelope.
+Secure-text v1 protects a text conversation between two known devices. It separates cryptographic
+message protection from delivery: SignalR, Local IPC, TCP, HTTP/WebSocket, and Service Bus can
+carry the same opaque envelope. Applications may form an explicitly approved group membership
+epoch by sending one separate pairwise-protected copy to every participant.
 
 ## Threat model
 
 The delivery service, storage layer, and network can read, retain, replay, delay, drop, and alter
 messages. They must not recover plaintext or create a valid altered envelope. The protocol does
 not conceal routing metadata: conversation id, sender device id, recipient device id, message
-time, size, and ordering counter remain visible to a relay.
+time, size, and ordering counter remain visible to a relay. The group profile also exposes group
+membership and a group identifier to the relay.
 
 TLS/WSS remains mandatory for non-local deployments. It protects credentials and metadata in
 transit but does not replace message-level end-to-end encryption.
@@ -39,6 +41,24 @@ device ids, epoch, counter, and sent time.
 The counter is monotonic per sender and epoch. Recipients retain a bounded replay window and
 reject duplicate, stale, or implausibly far-ahead counters only after successful authentication.
 
+## Explicit group profile
+
+A group has a fresh `SecureTextGroupId` for one immutable membership epoch. Every proposed device
+independently compares and pins every other member's public-bundle fingerprint, then explicitly
+approves the exact roster before it becomes active. The initiating device's create action is its
+explicit approval.
+
+For each recipient, the sender derives
+`SecureTextConversationId.DeriveForGroupMember(groupId, senderDevice, recipientDevice)` and
+encrypts an independent envelope. The resulting conversation id is authenticated header data, so
+a relay cannot move a ciphertext to another group id without decryption failure. A relay may omit
+or delay an envelope, but it cannot add a recipient unless the sender has approved that recipient's
+device and emits a separate ciphertext for it.
+
+Membership changes require a new group id and a full new round of fingerprint verification and
+approval. Removing a member prevents new delivery only; it does not revoke ciphertext already
+delivered or plaintext already read.
+
 ## Key lifecycle
 
 - Bundles expire after the configured validity window.
@@ -53,6 +73,7 @@ reject duplicate, stale, or implausibly far-ahead counters only after successful
 ## Limits
 
 V1 is not a Signal-compatible ratchet protocol. It makes no forward-secrecy or post-compromise
-security claim, does not define offline prekeys, group sender keys, device synchronization,
-read-receipts, deletion semantics, or metadata privacy. Do not add those properties by evolving
-the static scheme; choose an independently audited protocol implementation instead.
+security claim, does not define offline prekeys, sender keys, device synchronization, read-receipts,
+deletion semantics, or metadata privacy. Pairwise group fan-out has linear sender work and storage,
+and is not an MLS implementation. Do not add those properties by evolving the static scheme; choose
+an independently audited protocol implementation instead.
