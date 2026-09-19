@@ -10,6 +10,12 @@
 
 Cryptographic device identities and primitives for the Novolis secure-text v1 protocol.
 
+## Install
+
+```bash
+dotnet add package Novolis.Security.SecureText
+```
+
 ## Guarantees
 
 - P-256 ECDSA-signed public device bundles.
