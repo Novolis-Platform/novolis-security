@@ -15,6 +15,15 @@
     "Novolis.Security.HaveIBeenPwned": {
       "project": "src/Novolis.Security.HaveIBeenPwned/Novolis.Security.HaveIBeenPwned.csproj",
       "paths": ["src/Novolis.Security.HaveIBeenPwned/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.SecureText": {
+      "project": "src/Novolis.Security.SecureText/Novolis.Security.SecureText.csproj",
+      "paths": [
+        "src/Novolis.Security.SecureText/**",
+        "tests/Novolis.Security.Unit/SecureTextCryptographyTests.cs",
+        "docs/secure-text.md",
+        "Novolis.Security.slnx"
+      ]
     }
   }
 }

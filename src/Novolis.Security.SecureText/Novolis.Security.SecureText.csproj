@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.SecureText</PackageId>
+    <Description>Cryptographic primitives, device identities, and public bundles for authenticated end-to-end text transport.</Description>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+</Project>

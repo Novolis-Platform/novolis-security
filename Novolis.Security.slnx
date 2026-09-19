@@ -5,6 +5,7 @@
     <Project Path="src/Novolis.Security.PasswordHashing/Novolis.Security.PasswordHashing.csproj" />
     <Project Path="src/Novolis.Security.Encryption/Novolis.Security.Encryption.csproj" />
     <Project Path="src/Novolis.Security.HaveIBeenPwned/Novolis.Security.HaveIBeenPwned.csproj" />
+    <Project Path="src/Novolis.Security.SecureText/Novolis.Security.SecureText.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Novolis.Security.Unit/Novolis.Security.Unit.csproj" /></Folder>

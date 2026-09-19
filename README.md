@@ -45,6 +45,7 @@
 | `Novolis.Security.HaveIBeenPwned` | `dotnet add package Novolis.Security.HaveIBeenPwned` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.HaveIBeenPwned/README.md) |
 | `Novolis.Security.PasswordHashing` | `dotnet add package Novolis.Security.PasswordHashing` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.PasswordHashing/README.md) |
 | `Novolis.Security.Secrets` | `dotnet add package Novolis.Security.Secrets` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.Secrets/README.md) |
+| `Novolis.Security.SecureText` | `dotnet add package Novolis.Security.SecureText` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.SecureText/README.md) |
 
 For NuGet.org and Visual Studio, the **embedded** README.md inside each package is authoritative.
 
@@ -61,6 +62,7 @@ Cryptography, secret generation, password hashing, and breach-checking libraries
 | `Novolis.Security.PasswordHashing` | PBKDF2 password storage hashing |
 | `Novolis.Security.Encryption` | Reversible AES string encryption |
 | `Novolis.Security.HaveIBeenPwned` | Pwned Passwords range API client |
+| `Novolis.Security.SecureText` | Device identities and crypto primitives for end-to-end text |
 
 `Novolis.Security.WordLists` is an internal dependency (embedded word/character lists).
 

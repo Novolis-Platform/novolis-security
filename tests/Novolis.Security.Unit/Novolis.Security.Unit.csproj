@@ -15,5 +15,6 @@
     <ProjectReference Include="..\..\src\Novolis.Security.PasswordHashing\Novolis.Security.PasswordHashing.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.Encryption\Novolis.Security.Encryption.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.HaveIBeenPwned\Novolis.Security.HaveIBeenPwned.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.SecureText\Novolis.Security.SecureText.csproj" />
   </ItemGroup>
 </Project>
