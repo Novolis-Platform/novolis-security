@@ -12,49 +12,49 @@ public class PassphraseBuilder(int wordCount)
     /// <summary>Adds the noun word list.</summary>
     public PassphraseBuilder IncludeNouns()
     {
-        AddSingleTokenWords(Nouns.Get());
+        AddSingleTokenWords(Nouns.Instance);
         return this;
     }
 
     /// <summary>Adds the adjective word list.</summary>
     public PassphraseBuilder IncludeAdjectives()
     {
-        AddSingleTokenWords(Adjectives.Get());
+        AddSingleTokenWords(Adjectives.Instance);
         return this;
     }
 
     /// <summary>Adds the verb word list.</summary>
     public PassphraseBuilder IncludeVerbs()
     {
-        AddSingleTokenWords(Verbs.Get());
+        AddSingleTokenWords(Verbs.Instance);
         return this;
     }
 
     /// <summary>Adds the adverb word list.</summary>
     public PassphraseBuilder IncludeAdverbs()
     {
-        AddSingleTokenWords(Adverbs.Get());
+        AddSingleTokenWords(Adverbs.Instance);
         return this;
     }
 
     /// <summary>Adds the country name list.</summary>
     public PassphraseBuilder IncludeCountries()
     {
-        AddSingleTokenWords(Countries.Get());
+        AddSingleTokenWords(Countries.Instance);
         return this;
     }
 
     /// <summary>Adds the culture name list.</summary>
     public PassphraseBuilder IncludeCultures()
     {
-        AddSingleTokenWords(Cultures.Get());
+        AddSingleTokenWords(Cultures.Instance);
         return this;
     }
 
     /// <summary>Adds the color name list.</summary>
     public PassphraseBuilder IncludeColorNames()
     {
-        AddSingleTokenWords(ColorNames.Get());
+        AddSingleTokenWords(ColorNames.Instance);
         return this;
     }
 

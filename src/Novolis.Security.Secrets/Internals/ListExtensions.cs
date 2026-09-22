@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using Novolis.Security.Cryptography;
 
 namespace Novolis.Security.Secrets.Internals;
 
@@ -10,7 +10,7 @@ internal static class ListExtensions
         while (n > 1)
         {
             n--;
-            var k = RandomNumberGenerator.GetInt32(n + 1);
+            var k = SecureRandom.GetInt32(n + 1);
             (list[k], list[n]) = (list[n], list[k]);
         }
     }
@@ -23,7 +23,7 @@ internal static class ListExtensions
 
     public static T GetRandom<T>(this IList<T> list)
     {
-        var index = RandomNumberGenerator.GetInt32(list.Count);
+        var index = SecureRandom.GetInt32(list.Count);
         return list[index];
     }
 }

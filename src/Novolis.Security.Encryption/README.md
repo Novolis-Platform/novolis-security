@@ -8,7 +8,7 @@
 
 # Novolis.Security.Encryption
 
-AES string encryption and decryption with explicit key material.
+AES-256-GCM authenticated string encryption. The API takes a 32-byte key (`StringEncryptor.CreateKey()`). CBC/PKCS7 and GUID keys are not supported.
 
 ## Install
 
@@ -25,7 +25,7 @@ using Microsoft.Extensions.Options;
 using Novolis.Security.Encryption;
 
 var encryptor = new StringEncryptor(Options.Create(new StringEncryptorOptions()));
-var key = Guid.NewGuid();
+var key = StringEncryptor.CreateKey();
 
 string cipher = encryptor.Encrypt("payload", key);
 string plain = encryptor.Decrypt(cipher, key);
@@ -37,6 +37,7 @@ Bind `StringEncryptorOptions` from configuration (`IOptions`) in production host
 
 | Package | When to use |
 |---------|-------------|
+| `Novolis.Security.Cryptography` | CSPRNG used for nonces and keys |
 | `Novolis.Security.Secrets` | Generate keys and tokens |
 | `Novolis.Security.PasswordHashing` | One-way password storage (not reversible encryption) |
 

@@ -1,40 +1,34 @@
+<!-- novolis-pkg-brand:start -->
+<p align="center">
+  <a href="https://github.com/Novolis-Platform/novolis-security">
+    <img src="https://raw.githubusercontent.com/Novolis-Platform/.github/main/brand/logo-icon.svg" width="72" alt="Novolis"/>
+  </a>
+</p>
+<!-- novolis-pkg-brand:end -->
+
 # Novolis.Security.WordLists
 
-Curated word lists (nouns, verbs, adjectives, countries, colors) for passphrase generation.
-
-## Install
-
-```bash
-dotnet add package Novolis.Security.WordLists
-```
-
-**Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download) (`net10.0`).
+Curated word lists for passphrase generation. Each list is a **process-wide singleton** `IEnumerable<string>` (`IReadOnlyList<string>`) so the words stay in memory after first load.
 
 ## Quick start
 
 ```csharp
 using Novolis.Security.WordLists;
 
-IEnumerable<string> nouns = Nouns.Get();
-IEnumerable<string> adjectives = Adjectives.Get();
-IEnumerable<char> digits = Characters.Digits;
-IEnumerable<string> verbs = Verbs.Get();
+foreach (var noun in Nouns.Instance)
+    Console.WriteLine(noun);
+
+var count = Adjectives.Instance.Count;
+var first = Verbs.Instance[0];
 ```
 
-Typically consumed via `Novolis.Security.Secrets` rather than referenced directly in apps.
+| List | Access |
+|------|--------|
+| Nouns, Verbs, Adjectives, Adverbs, Countries, ColorNames, Cultures | `Type.Instance` |
+| Character classes | `Characters.Uppercase`, `.Digits`, `.All`, … |
 
-## Related packages
-
-| Package | When to use |
-|---------|-------------|
-| `Novolis.Security.Secrets` | `SecretGenerator` and `PassphraseBuilder` |
-| `Novolis.Security.PasswordHashing` | Store generated secrets safely |
-
-## More documentation
-
-- [Getting started](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/getting-started.md)
-- [Design](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/design.md)
+Typically consumed via `Novolis.Security.Secrets`. `Get()` factories that allocated a new `HashSet` on every call are gone.
 
 ## Support
 
-Pre-release (`2026.1.*` on GitHub Packages).
+Internal package (not published). Consumed by `Novolis.Security.Secrets`.

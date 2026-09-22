@@ -1,53 +1,67 @@
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Options;
+using Novolis.Security.Cryptography;
 
 namespace Novolis.Security.Encryption;
 
-/// <summary>AES string encryption with prepended IV.</summary>
+/// <summary>AES-256-GCM authenticated string encryption. Ciphertext is not decryptable without the tag matching.</summary>
 public class StringEncryptor(IOptions<StringEncryptorOptions> options)
 {
-    /// <summary>Encrypts a string with the given key.</summary>
-    public string Encrypt(string value, Guid key, StringEncryptorOptions? encryptOptions = null)
+    const int NonceSize = 12;
+    const int TagSize = 16;
+    const int KeySize = 32;
+    const byte Version = 1;
+
+    /// <summary>Encrypts UTF-8 <paramref name="value"/> with a 32-byte key. Output is versioned Base64 (nonce || tag || ciphertext).</summary>
+    public string Encrypt(string value, byte[] key, StringEncryptorOptions? encryptOptions = null)
     {
-        encryptOptions ??= options.Value;
-        var keyBytes = key.ToByteArray();
-        using var aes = GetAes(encryptOptions);
-        using var encryptor = aes.CreateEncryptor(keyBytes, aes.IV);
-        var ms = new MemoryStream();
-        ms.Write(aes.IV, 0, 16);
-        using var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write);
-        using (var sw = new StreamWriter(cs))
-            sw.Write(value);
-        if (!cs.HasFlushedFinalBlock)
-            cs.FlushFinalBlock();
-        return Convert.ToBase64String(ms.ToArray());
+        ArgumentNullException.ThrowIfNull(value);
+        ValidateKey(key);
+        _ = encryptOptions ?? options.Value;
+
+        var plaintext = Encoding.UTF8.GetBytes(value);
+        var nonce = SecureRandom.GetBytes(NonceSize);
+        var ciphertext = new byte[plaintext.Length];
+        var tag = new byte[TagSize];
+        using var gcm = new AesGcm(key, TagSize);
+        gcm.Encrypt(nonce, plaintext, ciphertext, tag);
+
+        var packed = new byte[1 + NonceSize + TagSize + ciphertext.Length];
+        packed[0] = Version;
+        nonce.CopyTo(packed.AsSpan(1));
+        tag.CopyTo(packed.AsSpan(1 + NonceSize));
+        ciphertext.CopyTo(packed.AsSpan(1 + NonceSize + TagSize));
+        return Convert.ToBase64String(packed);
     }
 
-    /// <summary>Decrypts a string produced by <see cref="Encrypt"/>.</summary>
-    public string Decrypt(string value, Guid key, StringEncryptorOptions? decryptOptions = null)
+    /// <summary>Decrypts a payload from <see cref="Encrypt"/>. Throws <see cref="CryptographicException"/> when the tag does not match.</summary>
+    public string Decrypt(string value, byte[] key, StringEncryptorOptions? decryptOptions = null)
     {
-        decryptOptions ??= options.Value;
-        var keyBytes = key.ToByteArray();
-        var bytes = Convert.FromBase64String(value);
-        using var aes = GetAes(decryptOptions);
-        var iv = new byte[aes.BlockSize / 8];
-        Array.Copy(bytes, 0, iv, 0, iv.Length);
-        var encryptedBytes = new byte[bytes.Length - iv.Length];
-        Array.Copy(bytes, iv.Length, encryptedBytes, 0, encryptedBytes.Length);
-        using var decryptor = aes.CreateDecryptor(keyBytes, iv);
-        using var ms = new MemoryStream(encryptedBytes);
-        using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
-        using var sr = new StreamReader(cs);
-        return sr.ReadToEnd();
+        ArgumentException.ThrowIfNullOrEmpty(value);
+        ValidateKey(key);
+        _ = decryptOptions ?? options.Value;
+
+        var packed = Convert.FromBase64String(value);
+        if (packed.Length < 1 + NonceSize + TagSize || packed[0] != Version)
+            throw new CryptographicException("Ciphertext is not a Novolis AES-256-GCM payload.");
+
+        var nonce = packed.AsSpan(1, NonceSize);
+        var tag = packed.AsSpan(1 + NonceSize, TagSize);
+        var ciphertext = packed.AsSpan(1 + NonceSize + TagSize);
+        var plaintext = new byte[ciphertext.Length];
+        using var gcm = new AesGcm(key, TagSize);
+        gcm.Decrypt(nonce, ciphertext, tag, plaintext);
+        return Encoding.UTF8.GetString(plaintext);
     }
 
-    private static Aes GetAes(StringEncryptorOptions encryptOptions)
+    /// <summary>Creates a 32-byte key suitable for <see cref="Encrypt"/>.</summary>
+    public static byte[] CreateKey() => SecureRandom.GetBytes(KeySize);
+
+    static void ValidateKey(byte[] key)
     {
-        var aes = Aes.Create();
-        aes.GenerateIV();
-        aes.KeySize = encryptOptions.KeySize;
-        aes.BlockSize = encryptOptions.BlockSize;
-        aes.Padding = encryptOptions.Padding;
-        return aes;
+        ArgumentNullException.ThrowIfNull(key);
+        if (key.Length != KeySize)
+            throw new ArgumentException("AES-256-GCM requires a 32-byte key.", nameof(key));
     }
 }

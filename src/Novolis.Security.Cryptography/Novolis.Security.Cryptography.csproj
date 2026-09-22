@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Cryptography</PackageId>
+    <Description>CSPRNG, constant-time compare, and HKDF-SHA512 helpers.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Cryptography</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Idp.Abstractions</PackageId>
+    <Description>Limited-scope IDP contracts, store interfaces, and persistable entities.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Idp</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Novolis.Storage.Abstractions" />
+  </ItemGroup>
+</Project>

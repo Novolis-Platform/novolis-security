@@ -41,8 +41,13 @@
 
 | Package | Install | Package README |
 |---------|---------|----------------|
+| `Novolis.Security.Cryptography` | `dotnet add package Novolis.Security.Cryptography` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.Cryptography/README.md) |
 | `Novolis.Security.Encryption` | `dotnet add package Novolis.Security.Encryption` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.Encryption/README.md) |
 | `Novolis.Security.HaveIBeenPwned` | `dotnet add package Novolis.Security.HaveIBeenPwned` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.HaveIBeenPwned/README.md) |
+| `Novolis.Security.Idp` | `dotnet add package Novolis.Security.Idp` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.Idp/README.md) |
+| `Novolis.Security.Idp.Abstractions` | `dotnet add package Novolis.Security.Idp.Abstractions` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.Idp.Abstractions/README.md) |
+| `Novolis.Security.Idp.AspNetCore` | `dotnet add package Novolis.Security.Idp.AspNetCore` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.Idp.AspNetCore/README.md) |
+| `Novolis.Security.Idp.Storage` | `dotnet add package Novolis.Security.Idp.Storage` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.Idp.Storage/README.md) |
 | `Novolis.Security.PasswordHashing` | `dotnet add package Novolis.Security.PasswordHashing` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.PasswordHashing/README.md) |
 | `Novolis.Security.Secrets` | `dotnet add package Novolis.Security.Secrets` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.Secrets/README.md) |
 | `Novolis.Security.SecureText` | `dotnet add package Novolis.Security.SecureText` | [README](https://github.com/Novolis-Platform/novolis-security/blob/main/src/Novolis.Security.SecureText/README.md) |
@@ -58,11 +63,13 @@ Cryptography, secret generation, password hashing, and breach-checking libraries
 
 | Package | Purpose |
 |---------|---------|
+| `Novolis.Security.Cryptography` | CSPRNG, constant-time compare, HKDF-SHA512 |
 | `Novolis.Security.Secrets` | Charset secrets and word passphrases (`ISecretGenerator`) |
-| `Novolis.Security.PasswordHashing` | PBKDF2 password storage hashing |
-| `Novolis.Security.Encryption` | Reversible AES string encryption |
+| `Novolis.Security.PasswordHashing` | Argon2id password storage hashing (PHC) |
+| `Novolis.Security.Encryption` | AES-256-GCM string encryption |
 | `Novolis.Security.HaveIBeenPwned` | Pwned Passwords range API client |
 | `Novolis.Security.SecureText` | Device identities and crypto primitives for end-to-end text |
+| `Novolis.Security.Idp.*` | Limited JWT IDP (ES384). Credential store is `AccountId` + hash only — never email/username |
 
 `Novolis.Security.WordLists` is an internal dependency (embedded word/character lists).
 

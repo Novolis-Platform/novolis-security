@@ -8,7 +8,7 @@
 
 # Novolis.Security.PasswordHashing
 
-PBKDF2 password hashing and verification with configurable work factors.
+PBKDF2 is gone. This package hashes passwords with **Argon2id** and stores a PHC string (`$argon2id$v=19$...`). Defaults follow OWASP (19 MiB, t=2, p=1). There is no legacy verify path.
 
 ## Install
 
@@ -35,6 +35,7 @@ Register `IPasswordHasher` via DI in ASP.NET Core hosts for credential stores.
 
 | Package | When to use |
 |---------|-------------|
+| `Novolis.Security.Cryptography` | CSPRNG + fixed-time compare used by this hasher |
 | `Novolis.Security.Secrets` | Generate initial passwords |
 | `Novolis.Security.HaveIBeenPwned` | Breach checks before accepting passwords |
 

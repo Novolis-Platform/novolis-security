@@ -1,31 +1,53 @@
-using System.Diagnostics;
-using Novolis.Security.PasswordHashing;
 using Microsoft.Extensions.Options;
+using Novolis.Security.PasswordHashing;
 using TUnit.Core;
 
 namespace Novolis.Security.Tests;
 
 public class PasswordHasherTests
 {
+    static PasswordHasher CreateHasher() =>
+        new(Options.Create(new PasswordHasherOptions
+        {
+            MemorySizeKiB = 32,
+            Iterations = 1,
+            DegreeOfParallelism = 1,
+        }));
+
     [Test]
-    [Arguments("password", 128)]
-    [Arguments("password", 256)]
-    [Arguments("password", 512)]
-    [Arguments("password", 1024)]
-    public async Task HashPassword(string password, int iterations)
+    public async Task HashPassword_RoundTrips()
     {
-        var options = Options.Create(new PasswordHasherOptions { Iterations = iterations });
-        var hasher = new PasswordHasher(options);
+        var hasher = CreateHasher();
+        var hash = hasher.HashPassword("correct horse battery staple");
 
-        var stopwatch = Stopwatch.StartNew();
-        var hash = hasher.HashPassword(password);
-        stopwatch.Stop();
-        TestContext.Current?.OutputWriter.WriteLine(hash);
+        await Assert.That(hash).StartsWith("$argon2id$v=19$");
+        await Assert.That(hasher.CompareHashedPassword(hash, "correct horse battery staple")).IsTrue();
+    }
 
-        var result = hasher.CompareHashedPassword(hash, password);
+    [Test]
+    public async Task CompareHashedPassword_RejectsWrongPassword()
+    {
+        var hasher = CreateHasher();
+        var hash = hasher.HashPassword("correct horse battery staple");
+        await Assert.That(hasher.CompareHashedPassword(hash, "wrong")).IsFalse();
+    }
 
-        await Assert.That(hash).IsNotNullOrEmpty();
-        await Assert.That(result).IsTrue();
-        TestContext.Current?.OutputWriter.WriteLine($"Hashing took {stopwatch.ElapsedMilliseconds} ms for {iterations} iterations.");
+    [Test]
+    public async Task CompareHashedPassword_RejectsGarbage()
+    {
+        var hasher = CreateHasher();
+        await Assert.That(hasher.CompareHashedPassword("not-a-hash", "password")).IsFalse();
+    }
+
+    [Test]
+    public async Task CompareHashedPassword_RejectsArgon2iAndNullBytes()
+    {
+        var hasher = CreateHasher();
+        var hash = hasher.HashPassword("pw");
+        await Assert.That(hasher.CompareHashedPassword(
+            "$argon2i$v=19$m=32,t=1,p=1$YWFhYWFhYWE$YmJiYmJiYmJiYmJiYmJiYg",
+            "pw")).IsFalse();
+        await Assert.That(hasher.CompareHashedPassword(hash, "pw\0admin")).IsFalse();
+        await Assert.That(hasher.CompareHashedPassword(hash, "pw")).IsTrue();
     }
 }

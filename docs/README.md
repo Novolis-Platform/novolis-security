@@ -9,17 +9,21 @@ Published docs: [https://novolis-platform.github.io/.github/novolis-security/](h
 | Doc | What it covers |
 | --- | --- |
 | [getting-started.md](getting-started.md) | Install, restore from GitHub Packages, first use |
-| [design.md](design.md) | Goals, layer placement, non-goals |
+| [design.md](design.md) | Goals, layer placement, non-goals, credential store isolation |
+| [owasp-security-evaluation.md](owasp-security-evaluation.md) | OWASP ASVS / API Top 10 / JWT / OAuth BCP evaluation of the IDP and crypto libraries |
 | [release.md](release.md) | CalVer publish and package list |
 
 ## Packages
 
 | Package |
 | --- |
+| `Novolis.Security.Cryptography` |
 | `Novolis.Security.Encryption` |
 | `Novolis.Security.HaveIBeenPwned` |
+| `Novolis.Security.Idp` / `.Abstractions` / `.AspNetCore` / `.Storage` |
 | `Novolis.Security.PasswordHashing` |
 | `Novolis.Security.Secrets` |
+| `Novolis.Security.SecureText` |
 
 ## More
 

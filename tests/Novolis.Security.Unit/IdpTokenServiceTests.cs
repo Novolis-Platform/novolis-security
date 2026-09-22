@@ -1,0 +1,278 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Novolis.Security.Idp;
+using Novolis.Security.Idp.AspNetCore;
+using Novolis.Security.Idp.Storage;
+using Novolis.Security.PasswordHashing;
+using Novolis.Storage.Abstractions;
+using Novolis.Storage.InMemory;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using TUnit.Core;
+
+namespace Novolis.Security.Tests;
+
+public class IdpTokenServiceTests
+{
+    [Test]
+    public async Task IdpAccount_HasNoIdentifierFields()
+    {
+        var names = typeof(IdpAccount).GetProperties().Select(p => p.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        string[] forbidden = ["Email", "Username", "UserName", "Handle", "HandleHash", "Phone", "DisplayName"];
+        foreach (var name in forbidden)
+            await Assert.That(names.Contains(name)).IsFalse();
+
+        var methods = typeof(IAccountStore).GetMethods().Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+        await Assert.That(methods.Contains("TryGetAsync")).IsTrue();
+        await Assert.That(methods.Any(m => m.Contains("Email", StringComparison.OrdinalIgnoreCase)
+                                          || m.Contains("Handle", StringComparison.OrdinalIgnoreCase)
+                                          || m.Contains("User", StringComparison.OrdinalIgnoreCase))).IsFalse();
+    }
+
+    [Test]
+    public async Task PasswordGrant_UnknownAccount_SameErrorAsBadPassword()
+    {
+        await using var provider = CreateProvider();
+        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        await SeedClientAsync(provider);
+
+        var missing = await tokens.IssueAsync(PasswordRequest(AccountId.New(), "password"));
+        var wrong = await tokens.IssueAsync(PasswordRequest(await SeedAccountAsync(provider, "password"), "nope"));
+
+        await Assert.That(missing.Error).IsEqualTo(IdpTokenErrors.InvalidGrant);
+        await Assert.That(wrong.Error).IsEqualTo(IdpTokenErrors.InvalidGrant);
+    }
+
+    [Test]
+    public async Task PasswordGrant_IssuesEs384Jwt()
+    {
+        await using var provider = CreateProvider();
+        var tokens = provider.GetRequiredService<IdpTokenService>();
+        await SeedClientAsync(provider);
+        var account = await SeedAccountAsync(provider, "correct horse battery staple");
+
+        var issued = await tokens.IssueAsync(PasswordRequest(account, "correct horse battery staple"));
+        await Assert.That(issued.Succeeded).IsTrue();
+
+        var validated = await tokens.ValidateAsync(issued.AccessToken!);
+        await Assert.That(validated.IsValid).IsTrue();
+        await Assert.That(validated.ClaimsIdentity?.FindFirst("sub")?.Value).IsEqualTo(account.Value.ToString("D"));
+        await Assert.That(issued.RefreshToken).IsNotNull();
+    }
+
+    [Test]
+    public async Task Refresh_Rotates_AndReuseRevokesFamily()
+    {
+        await using var provider = CreateProvider();
+        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        await SeedClientAsync(provider);
+        var account = await SeedAccountAsync(provider, "pw");
+
+        var first = await tokens.IssueAsync(PasswordRequest(account, "pw"));
+        var rotated = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = IdpGrantTypes.RefreshToken,
+            ClientId = "app",
+            ClientSecret = "client-secret",
+            RefreshToken = first.RefreshToken,
+        });
+        await Assert.That(rotated.Succeeded).IsTrue();
+        await Assert.That(rotated.RefreshToken).IsNotEqualTo(first.RefreshToken);
+
+        var replay = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = IdpGrantTypes.RefreshToken,
+            ClientId = "app",
+            ClientSecret = "client-secret",
+            RefreshToken = first.RefreshToken,
+        });
+        await Assert.That(replay.Succeeded).IsFalse();
+        await Assert.That(replay.Error).IsEqualTo(IdpTokenErrors.InvalidGrant);
+
+        var afterReuse = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = IdpGrantTypes.RefreshToken,
+            ClientId = "app",
+            ClientSecret = "client-secret",
+            RefreshToken = rotated.RefreshToken,
+        });
+        await Assert.That(afterReuse.Succeeded).IsFalse();
+    }
+
+    [Test]
+    public async Task ClientCredentials_OmitsRefresh_AndNarrowsScope()
+    {
+        await using var provider = CreateProvider();
+        var tokens = provider.GetRequiredService<IdpTokenService>();
+        await SeedClientAsync(provider);
+
+        var issued = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = IdpGrantTypes.ClientCredentials,
+            ClientId = "app",
+            ClientSecret = "client-secret",
+            Scope = "api",
+        });
+        await Assert.That(issued.Succeeded).IsTrue();
+        await Assert.That(issued.RefreshToken).IsNull();
+        await Assert.That(issued.Scope).IsEqualTo("api");
+
+        var denied = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = IdpGrantTypes.ClientCredentials,
+            ClientId = "app",
+            ClientSecret = "client-secret",
+            Scope = "admin",
+        });
+        await Assert.That(denied.Error).IsEqualTo(IdpTokenErrors.InvalidScope);
+    }
+
+    [Test]
+    public async Task EphemeralKey_ForbiddenOutsideDevelopment()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        IdpServiceCollectionExtensions.AddNovolisIdp(services, o =>
+        {
+            o.IsDevelopment = false;
+            o.AllowEphemeralSigningKey = true;
+        });
+        await using var provider = services.BuildServiceProvider();
+        var act = () => provider.GetRequiredService<IIdpTokenService>();
+        await Assert.That(act).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task WebEndpoints_TokenAndJwks_RoundTrip()
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
+        builder.WebHost.UseTestServer();
+        builder.Services.Configure<PasswordHasherOptions>(FastArgon);
+        IdpAspNetCoreServiceCollectionExtensions.AddNovolisIdp(builder.Services, o =>
+        {
+            o.Issuer = "https://idp.test";
+            o.AllowEphemeralSigningKey = true;
+        });
+        await using var app = builder.Build();
+        app.UseRateLimiter();
+        app.MapNovolisIdp();
+        await app.StartAsync();
+
+        await SeedClientAsync(app.Services);
+        var account = await SeedAccountAsync(app.Services, "pw");
+        var client = app.GetTestClient();
+
+        using var tokenResponse = await client.PostAsync(
+            "/oauth/token",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "password",
+                ["client_id"] = "app",
+                ["client_secret"] = "client-secret",
+                ["username"] = account.Value.ToString("D"),
+                ["password"] = "pw",
+            }));
+        await Assert.That(tokenResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var payload = await tokenResponse.Content.ReadFromJsonAsync<JsonElement>();
+        await Assert.That(payload.GetProperty("access_token").GetString()).IsNotNull();
+
+        using var jwks = await client.GetAsync("/.well-known/jwks.json");
+        await Assert.That(jwks.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        var keys = await jwks.Content.ReadFromJsonAsync<JsonElement>();
+        await Assert.That(keys.GetProperty("keys").GetArrayLength()).IsEqualTo(1);
+        await Assert.That(keys.GetProperty("keys")[0].GetProperty("alg").GetString()).IsEqualTo("ES384");
+    }
+
+    [Test]
+    public async Task RepositoryStores_PasswordGrant_PersistsRefresh()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<PasswordHasherOptions>(FastArgon);
+        IdpServiceCollectionExtensions.AddNovolisIdp(services, o =>
+        {
+            o.Issuer = "https://idp.test";
+            o.IsDevelopment = true;
+            o.AllowEphemeralSigningKey = true;
+        });
+        services.AddStorage(b => b.AddInMemoryProvider());
+        services.AddNovolisIdpStorage();
+        await using var provider = services.BuildServiceProvider();
+
+        await SeedClientAsync(provider);
+        var account = await SeedAccountAsync(provider, "pw");
+        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var issued = await tokens.IssueAsync(PasswordRequest(account, "pw"));
+        await Assert.That(issued.Succeeded).IsTrue();
+
+        var refreshRepo = provider.GetRequiredService<IRepository<IdpRefreshToken>>();
+        await Assert.That(refreshRepo.All().Any()).IsTrue();
+    }
+
+    static TokenIssueRequest PasswordRequest(AccountId account, string password) => new()
+    {
+        GrantType = IdpGrantTypes.Password,
+        ClientId = "app",
+        ClientSecret = "client-secret",
+        AccountId = account,
+        Password = password,
+    };
+
+    static void FastArgon(PasswordHasherOptions o)
+    {
+        o.MemorySizeKiB = 32;
+        o.Iterations = 1;
+        o.DegreeOfParallelism = 1;
+    }
+
+    static ServiceProvider CreateProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<PasswordHasherOptions>(FastArgon);
+        IdpServiceCollectionExtensions.AddNovolisIdp(services, o =>
+        {
+            o.Issuer = "https://idp.test";
+            o.IsDevelopment = true;
+            o.AllowEphemeralSigningKey = true;
+        });
+        return services.BuildServiceProvider();
+    }
+
+    static async Task SeedClientAsync(IServiceProvider services)
+    {
+        var hasher = services.GetRequiredService<PasswordHasher>();
+        var clients = services.GetRequiredService<IClientStore>();
+        await clients.UpsertAsync(new IdpClient
+        {
+            Id = Guid.CreateVersion7(),
+            ClientId = "app",
+            SecretHash = hasher.HashPassword("client-secret"),
+            Confidential = true,
+            AllowedGrantTypes =
+            [
+                IdpGrantTypes.Password,
+                IdpGrantTypes.RefreshToken,
+                IdpGrantTypes.ClientCredentials,
+            ],
+            AllowedScopes = ["openid", "api"],
+            AllowedAudiences = ["novolis"],
+        });
+    }
+
+    static async Task<AccountId> SeedAccountAsync(IServiceProvider services, string password)
+    {
+        var hasher = services.GetRequiredService<PasswordHasher>();
+        var accounts = services.GetRequiredService<IAccountStore>();
+        var id = AccountId.New();
+        await accounts.UpsertAsync(new IdpAccount
+        {
+            Id = id.Value,
+            PasswordHash = hasher.HashPassword(password),
+            CreatedUtc = DateTimeOffset.UtcNow,
+        });
+        return id;
+    }
+}

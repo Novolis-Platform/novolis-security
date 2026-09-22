@@ -1,6 +1,6 @@
 # Getting started
 
-Password hashing, encryption, and HaveIBeenPwned helpers.
+Password hashing (Argon2id), AES-256-GCM encryption, HaveIBeenPwned helpers, and a limited JWT IDP.
 
 Published guide: [https://novolis-platform.github.io/.github/novolis-security/](https://novolis-platform.github.io/.github/novolis-security/)
 
@@ -26,5 +26,6 @@ Local multi-repo iteration uses ProjectReference mode via `d:\novolis\Novolis.Pl
 ## Next
 
 - [design.md](design.md) — layer placement and non-goals
+- [owasp-security-evaluation.md](owasp-security-evaluation.md) — OWASP evaluation of the IDP and crypto libraries
 - [release.md](release.md) — publish cadence
 - [Org docs catalog](https://novolis-platform.github.io/.github/)

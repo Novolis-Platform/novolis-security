@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Idp</PackageId>
+    <Description>Limited-scope JWT IDP: ES384 issuance, Argon2id credentials, in-memory stores.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Idp</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Novolis.Security.Idp.Abstractions\Novolis.Security.Idp.Abstractions.csproj" />
+    <ProjectReference Include="..\Novolis.Security.PasswordHashing\Novolis.Security.PasswordHashing.csproj" />
+    <ProjectReference Include="..\Novolis.Security.Cryptography\Novolis.Security.Cryptography.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+  </ItemGroup>
+</Project>

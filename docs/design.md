@@ -22,13 +22,29 @@ Follow [library-boundaries](https://github.com/Novolis-Platform/novolis-governan
 
 ## Packages
 
+- `Novolis.Security.Cryptography` (CSPRNG, constant-time compare, HKDF-SHA512)
 - `Novolis.Security.Encryption`
 - `Novolis.Security.HaveIBeenPwned`
 - `Novolis.Security.PasswordHashing`
 - `Novolis.Security.Secrets`
+- `Novolis.Security.Idp.Abstractions` / `Novolis.Security.Idp` / `.AspNetCore` / `.Storage`
+
+Word lists (`Novolis.Security.WordLists`, internal) are process-wide `IEnumerable<string>` singletons (`Type.Instance`).
+
+## Credential store isolation
+
+`IAccountStore` is a **credential vault**, not a user directory.
+
+- Allowed on `IdpAccount`: opaque `AccountId`, Argon2id password hash, disabled flag, timestamps.
+- Forbidden on `IdpAccount` (and on the same database/backup/export): email, username, phone, display name, handle hashes of those identifiers.
+
+Placing username/email behind the same auth as the password hash is a **grave violation of minimum secure data-store design**. Identifier lookup must live in a completely different system that maps those values to `AccountId`. The IDP password grant then authenticates by `AccountId` + password only.
 
 ## Topics
 
 - `dotnet`
 - `security`
 - `novolis`
+- `owasp`
+
+See also: [owasp-security-evaluation.md](owasp-security-evaluation.md).

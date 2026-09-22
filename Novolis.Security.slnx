@@ -1,11 +1,16 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Novolis.Security.Cryptography/Novolis.Security.Cryptography.csproj" />
     <Project Path="src/Novolis.Security.WordLists/Novolis.Security.WordLists.csproj" />
     <Project Path="src/Novolis.Security.Secrets/Novolis.Security.Secrets.csproj" />
     <Project Path="src/Novolis.Security.PasswordHashing/Novolis.Security.PasswordHashing.csproj" />
     <Project Path="src/Novolis.Security.Encryption/Novolis.Security.Encryption.csproj" />
     <Project Path="src/Novolis.Security.HaveIBeenPwned/Novolis.Security.HaveIBeenPwned.csproj" />
     <Project Path="src/Novolis.Security.SecureText/Novolis.Security.SecureText.csproj" />
+    <Project Path="src/Novolis.Security.Idp.Abstractions/Novolis.Security.Idp.Abstractions.csproj" />
+    <Project Path="src/Novolis.Security.Idp/Novolis.Security.Idp.csproj" />
+    <Project Path="src/Novolis.Security.Idp.AspNetCore/Novolis.Security.Idp.AspNetCore.csproj" />
+    <Project Path="src/Novolis.Security.Idp.Storage/Novolis.Security.Idp.Storage.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Novolis.Security.Unit/Novolis.Security.Unit.csproj" /></Folder>

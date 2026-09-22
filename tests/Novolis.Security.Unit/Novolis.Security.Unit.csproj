@@ -4,17 +4,27 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Novolis.Testing.Logging" />
+    <PackageReference Include="Novolis.Storage.Abstractions" />
+    <PackageReference Include="Novolis.Storage.InMemory" />
     <PackageReference Include="TUnit" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Novolis.Security.Cryptography\Novolis.Security.Cryptography.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.WordLists\Novolis.Security.WordLists.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.Secrets\Novolis.Security.Secrets.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.PasswordHashing\Novolis.Security.PasswordHashing.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.Encryption\Novolis.Security.Encryption.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.HaveIBeenPwned\Novolis.Security.HaveIBeenPwned.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.SecureText\Novolis.Security.SecureText.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Idp.Abstractions\Novolis.Security.Idp.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Idp\Novolis.Security.Idp.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Idp.AspNetCore\Novolis.Security.Idp.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Idp.Storage\Novolis.Security.Idp.Storage.csproj" />
   </ItemGroup>
 </Project>
