@@ -13,5 +13,7 @@
     <Project Path="src/Novolis.Security.Idp.Storage/Novolis.Security.Idp.Storage.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/Novolis.Security.Unit/Novolis.Security.Unit.csproj" /></Folder>
+    <Project Path="tests/Novolis.Security.Unit/Novolis.Security.Unit.csproj" />
+    <Project Path="tests/Novolis.Security.Idp.Integration/Novolis.Security.Idp.Integration.csproj" />
+  </Folder>
 </Solution>

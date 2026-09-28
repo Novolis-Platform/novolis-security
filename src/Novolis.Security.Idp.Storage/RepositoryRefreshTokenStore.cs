@@ -23,4 +23,18 @@ public sealed class RepositoryRefreshTokenStore(IRepository<IdpRefreshToken> rep
         IReadOnlyList<IdpRefreshToken> matches = repository.All().Where(t => t.FamilyId == familyId).ToArray();
         return ValueTask.FromResult(matches);
     }
+
+    /// <inheritdoc />
+    public async ValueTask<bool> TryRotateAsync(Guid currentId, IdpRefreshToken replacement, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        var current = await repository.TryGetAsync(currentId, ct).ConfigureAwait(false);
+        if (current is null || current.RevokedUtc is not null)
+            return false;
+
+        current.RevokedUtc = DateTimeOffset.UtcNow;
+        await repository.UpsertAsync(current, ct).ConfigureAwait(false);
+        await repository.UpsertAsync(replacement, ct).ConfigureAwait(false);
+        return true;
+    }
 }

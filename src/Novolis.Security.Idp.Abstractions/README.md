@@ -8,9 +8,9 @@
 
 # Novolis.Security.Idp.Abstractions
 
-Contracts for a **limited-scope** first-party identity provider: JWT issuance stores, persistable entities (`IHasId`), and token request/result types.
+Contracts for **limited-scope** first-party identity / authentication: JWT issuance stores, persistable entities (`IHasId`), and token request/result types.
 
-This is not IdentityServer, Duende, or OpenIddict. No authorization-code UI, federation, or userinfo.
+This is not an IDP host, IdentityServer, Duende, or OpenIddict. No authorization-code UI, federation, or userinfo. A full IDP executable composes these packages with TLS, directories, and edge limits.
 
 ## Credential store isolation (non-negotiable)
 
@@ -35,7 +35,10 @@ dotnet add package Novolis.Security.Idp.Abstractions
 | `IAccountStore` | `AccountId` only (no identifier columns) |
 | `IClientStore` | `client_id` |
 | `IRefreshTokenStore` | Refresh id (`Guid`) + family id |
-| `ISigningKeyStore` | Active keys / `kid` |
+| `IKeyStore` / `ISigningKeyStore` | Active keys / `kid` |
+| `ICacheStore` | Rate-limit counters and rotation leases |
+| `IEventStore` | Optional grant observations (default no-op) |
+| `ITokenService` | Issue / revoke |
 
 Entities implement `Novolis.Storage.Abstractions.IHasId` so `IRepository<T>` can persist them. Wire adapters via `Novolis.Security.Idp.Storage`, or use the in-memory stores in `Novolis.Security.Idp`.
 

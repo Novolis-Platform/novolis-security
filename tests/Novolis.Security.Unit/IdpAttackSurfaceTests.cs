@@ -19,7 +19,7 @@ public class IdpAttackSurfaceTests
     {
         await using var provider = IdpTestHost.CreateProvider();
         await IdpTestHost.SeedClientAsync(provider);
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         var result = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = "authorization_code",
@@ -35,7 +35,7 @@ public class IdpAttackSurfaceTests
     {
         await using var provider = IdpTestHost.CreateProvider();
         await IdpTestHost.SeedClientAsync(provider);
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         foreach (var grant in new[]
                  {
                      "implicit",
@@ -60,7 +60,7 @@ public class IdpAttackSurfaceTests
         await using var provider = IdpTestHost.CreateProvider();
         await IdpTestHost.SeedClientAsync(provider);
         var account = await IdpTestHost.SeedAccountAsync(provider, "pw");
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         var issued = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = IdpGrantTypes.Password,
@@ -98,7 +98,7 @@ public class IdpAttackSurfaceTests
         await using var provider = IdpTestHost.CreateProvider(o => o.RefreshTokenLifetime = TimeSpan.FromSeconds(-1));
         await IdpTestHost.SeedClientAsync(provider);
         var account = await IdpTestHost.SeedAccountAsync(provider, "pw");
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         var issued = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = IdpGrantTypes.Password,
@@ -123,7 +123,7 @@ public class IdpAttackSurfaceTests
         await using var provider = IdpTestHost.CreateProvider();
         await IdpTestHost.SeedClientAsync(provider);
         var account = await IdpTestHost.SeedAccountAsync(provider, "pw");
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         var issued = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = IdpGrantTypes.Password,
@@ -160,7 +160,7 @@ public class IdpAttackSurfaceTests
         await using var provider = IdpTestHost.CreateProvider();
         await IdpTestHost.SeedClientAsync(provider);
         var account = await IdpTestHost.SeedAccountAsync(provider, "pw");
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         var issued = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = IdpGrantTypes.Password,
@@ -482,7 +482,7 @@ public class IdpAttackSurfaceTests
     {
         await using var provider = IdpTestHost.CreateProvider();
         await IdpTestHost.SeedClientAsync(provider);
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         var unknown = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = IdpGrantTypes.ClientCredentials,
@@ -506,7 +506,7 @@ public class IdpAttackSurfaceTests
         await using var provider = IdpTestHost.CreateProvider();
         await IdpTestHost.SeedClientAsync(provider);
         var account = await IdpTestHost.SeedAccountAsync(provider, "pw");
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         var issued = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = IdpGrantTypes.Password,

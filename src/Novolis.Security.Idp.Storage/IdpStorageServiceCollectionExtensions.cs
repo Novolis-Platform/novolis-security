@@ -4,10 +4,10 @@ using Novolis.Security.Idp;
 
 namespace Novolis.Security.Idp.Storage;
 
-/// <summary>Binds IDP stores to <c>IRepository&lt;T&gt;</c>. Call after <c>AddNovolisIdp</c> and <c>AddStorage</c>.</summary>
+/// <summary>Binds identity stores to <c>IRepository&lt;T&gt;</c>. Call after <c>AddNovolisIdp</c> and <c>AddStorage</c>.</summary>
 public static class IdpStorageServiceCollectionExtensions
 {
-    /// <summary>Replaces in-memory IDP stores with repository adapters.</summary>
+    /// <summary>Replaces in-memory identity stores with repository adapters.</summary>
     public static IServiceCollection AddNovolisIdpStorage(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -15,6 +15,7 @@ public static class IdpStorageServiceCollectionExtensions
         services.Replace(ServiceDescriptor.Singleton<IClientStore, RepositoryClientStore>());
         services.Replace(ServiceDescriptor.Singleton<IRefreshTokenStore, RepositoryRefreshTokenStore>());
         services.Replace(ServiceDescriptor.Singleton<ISigningKeyStore, RepositorySigningKeyStore>());
+        services.Replace(ServiceDescriptor.Singleton<IKeyStore>(sp => sp.GetRequiredService<ISigningKeyStore>()));
         return services;
     }
 }

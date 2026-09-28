@@ -11,4 +11,10 @@ public interface IRefreshTokenStore
 
     /// <summary>All rows in a rotation family (for reuse revocation).</summary>
     ValueTask<IReadOnlyList<IdpRefreshToken>> FindByFamilyIdAsync(Guid familyId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Revokes <paramref name="currentId"/> and inserts <paramref name="replacement"/> only if the current row is still unrevoked.
+    /// Returns <see langword="false"/> when the current token is missing or already spent (caller must revoke the family).
+    /// </summary>
+    ValueTask<bool> TryRotateAsync(Guid currentId, IdpRefreshToken replacement, CancellationToken ct = default);
 }

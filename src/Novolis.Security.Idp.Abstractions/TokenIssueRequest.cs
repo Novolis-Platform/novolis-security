@@ -14,7 +14,7 @@ public sealed class TokenIssueRequest
 
     /// <summary>
     /// Already-resolved account for the password grant.
-    /// Resolve email/username in a separate directory first; passing those strings into the IDP is forbidden.
+    /// Resolve email/username in a separate directory first; do not pass those strings into this library.
     /// </summary>
     public AccountId? AccountId { get; init; }
 

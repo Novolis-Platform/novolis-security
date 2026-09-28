@@ -17,6 +17,9 @@ public sealed class IdpClient : IHasId
     /// <summary>When false, all grants are rejected. The MVP requires confidential clients.</summary>
     public bool Confidential { get; set; } = true;
 
+    /// <summary>When true, authentication fails closed with the same error as a bad secret.</summary>
+    public bool Disabled { get; set; }
+
     /// <summary>Allowed <see cref="IdpGrantTypes"/> values.</summary>
     public List<string> AllowedGrantTypes { get; set; } = [];
 

@@ -5,7 +5,7 @@ using Novolis.Security.PasswordHashing;
 
 namespace Novolis.Security.Idp;
 
-/// <summary>DI registration for the limited IDP (in-memory stores by default).</summary>
+/// <summary>DI registration for identity / authentication (in-memory stores by default).</summary>
 public static class IdpServiceCollectionExtensions
 {
     /// <summary>
@@ -28,9 +28,12 @@ public static class IdpServiceCollectionExtensions
         services.TryAddSingleton<IClientStore, InMemoryClientStore>();
         services.TryAddSingleton<IRefreshTokenStore, InMemoryRefreshTokenStore>();
         services.TryAddSingleton<ISigningKeyStore, InMemorySigningKeyStore>();
+        services.TryAddSingleton<IKeyStore>(sp => sp.GetRequiredService<ISigningKeyStore>());
+        services.TryAddSingleton<ICacheStore, InMemoryCacheStore>();
+        services.TryAddSingleton<IEventStore>(_ => NoopEventStore.Instance);
         services.TryAddSingleton<SigningKeyRing>();
         services.TryAddSingleton<IdpTokenService>();
-        services.TryAddSingleton<IIdpTokenService>(sp => sp.GetRequiredService<IdpTokenService>());
+        services.TryAddSingleton<ITokenService>(sp => sp.GetRequiredService<IdpTokenService>());
         return services;
     }
 }

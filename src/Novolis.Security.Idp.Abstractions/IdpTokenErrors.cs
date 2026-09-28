@@ -1,6 +1,6 @@
 namespace Novolis.Security.Idp;
 
-/// <summary>RFC 6749 error codes returned by <see cref="IIdpTokenService"/>.</summary>
+/// <summary>RFC 6749 error codes returned by <see cref="ITokenService"/>.</summary>
 public static class IdpTokenErrors
 {
     /// <summary>Malformed or missing request fields.</summary>
@@ -20,4 +20,7 @@ public static class IdpTokenErrors
 
     /// <summary>Requested scopes do not intersect the client's allow-list.</summary>
     public const string InvalidScope = "invalid_scope";
+
+    /// <summary>Too many attempts in the cache window. HTTP layer maps this to 429.</summary>
+    public const string RateLimited = "temporarily_unavailable";
 }

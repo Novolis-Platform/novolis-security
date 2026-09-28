@@ -13,6 +13,7 @@ public class PasswordHasher(IOptions<PasswordHasherOptions> options)
     public string HashPassword(string password)
     {
         ArgumentException.ThrowIfNullOrEmpty(password);
+        password = Normalize(password);
         var o = options.Value;
         if (password.Length > o.MaxPasswordLength)
             throw new ArgumentOutOfRangeException(nameof(password), "Password exceeds MaxPasswordLength.");
@@ -26,6 +27,7 @@ public class PasswordHasher(IOptions<PasswordHasherOptions> options)
     {
         if (string.IsNullOrEmpty(hashedPassword) || string.IsNullOrEmpty(password))
             return false;
+        password = Normalize(password);
         var o = options.Value;
         if (password.Length > o.MaxPasswordLength)
             return false;
@@ -35,6 +37,8 @@ public class PasswordHasher(IOptions<PasswordHasherOptions> options)
         var actual = Derive(password, salt, memory, iterations, parallelism, expected.Length);
         return ConstantTime.Equals(actual, expected);
     }
+
+    static string Normalize(string password) => password.Normalize(NormalizationForm.FormC);
 
     private static byte[] Derive(string password, byte[] salt, int memoryKiB, int iterations, int parallelism, int hashSize)
     {

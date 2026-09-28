@@ -50,4 +50,15 @@ public class PasswordHasherTests
         await Assert.That(hasher.CompareHashedPassword(hash, "pw\0admin")).IsFalse();
         await Assert.That(hasher.CompareHashedPassword(hash, "pw")).IsTrue();
     }
+
+    [Test]
+    public async Task CompareHashedPassword_AcceptsNfcAndNfdOfSameCharacter()
+    {
+        var hasher = CreateHasher();
+        var nfc = "café";
+        var nfd = "cafe\u0301";
+        var hash = hasher.HashPassword(nfd);
+        await Assert.That(hasher.CompareHashedPassword(hash, nfc)).IsTrue();
+        await Assert.That(hasher.CompareHashedPassword(hash, nfd)).IsTrue();
+    }
 }

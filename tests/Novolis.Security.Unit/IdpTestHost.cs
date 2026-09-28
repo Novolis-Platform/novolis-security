@@ -33,7 +33,6 @@ internal sealed class IdpTestHost : IAsyncDisposable
             configure?.Invoke(o);
         });
         var app = builder.Build();
-        app.UseRateLimiter();
         app.MapNovolisIdp();
         await app.StartAsync();
         return new IdpTestHost(app, app.GetTestClient());

@@ -19,5 +19,8 @@
     <PackageVersion Include="Novolis.Testing.Logging" Version="2026.1.*" />
     <PackageVersion Include="Novolis.Storage.Abstractions" Version="2026.1.*" />
     <PackageVersion Include="Novolis.Storage.InMemory" Version="2026.1.*" />
+    <PackageVersion Include="Novolis.Storage.Json" Version="2026.1.*" />
+    <PackageVersion Include="Novolis.Storage.Sqlite" Version="2026.1.*" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
   </ItemGroup>
 </Project>

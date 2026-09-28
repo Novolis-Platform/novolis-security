@@ -8,11 +8,11 @@
 
 # Novolis.Security.Idp.Storage
 
-`IRepository<T>` adapters for IDP stores. The host chooses Json / LiteDB / SQLite / in-memory via `AddStorage`.
+`IRepository<T>` adapters for identity stores. The host chooses Json / LiteDB / SQLite / in-memory via `AddStorage`.
 
 `IAccountStore` still loads **only by `AccountId`**. Do not add email/username columns to `IdpAccount` or query them here. Identifier lookup is a different system. Co-locating those fields with password hashes is a grave violation of minimum secure data-store design.
 
-Username / `client_id` scans use `IRepository.All()` — acceptable for a limited IDP. Custom stores may add SQL indexes later. `client_id` is an OAuth client name, not a customer email.
+Username / `client_id` scans use `IRepository.All()` — acceptable for this limited library. Custom stores may add SQL indexes later. `client_id` is an OAuth client name, not a customer email.
 
 ## Install
 

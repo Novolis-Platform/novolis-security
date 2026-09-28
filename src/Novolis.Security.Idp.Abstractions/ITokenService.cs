@@ -1,7 +1,7 @@
 namespace Novolis.Security.Idp;
 
-/// <summary>Issues and revokes tokens for the limited IDP.</summary>
-public interface IIdpTokenService
+/// <summary>Issues and revokes tokens for this identity library. A full IDP host composes this with TLS, directories, and edge limits.</summary>
+public interface ITokenService
 {
     /// <summary>Issues an access token (and refresh token when the grant allows it).</summary>
     ValueTask<TokenIssueResult> IssueAsync(TokenIssueRequest request, CancellationToken ct = default);

@@ -33,8 +33,8 @@ public class HaveIBeenPwnedClient(IHttpClientFactory clientFactory, ILogger<Have
     {
         using var client = clientFactory.CreateClient();
         var response = await client.GetStringAsync($"{options.Value.PwnedPasswordAddress}/{hash.Prefix}");
-        logger.LogInformation("Response: {Response}", response);
-        var parsedResponse = ParseResponse(response);
+        var parsedResponse = ParseResponse(response).ToArray();
+        logger.LogDebug("Pwned Passwords range lookup completed with {SuffixCount} suffixes.", parsedResponse.Length);
         return parsedResponse.Select(pair => CreatePassword(pair, hash.Prefix));
     }
 

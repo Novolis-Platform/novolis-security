@@ -31,7 +31,6 @@ public static class IdpEndpointRouteBuilderExtensions
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapPost("/oauth/token", IssueTokenAsync)
-            .RequireRateLimiting(IdpAspNetCoreServiceCollectionExtensions.TokenRateLimitPolicy)
             .DisableAntiforgery();
         endpoints.MapPost("/oauth/revoke", RevokeTokenAsync).DisableAntiforgery();
         endpoints.MapGet("/.well-known/jwks.json", Jwks);
@@ -39,7 +38,7 @@ public static class IdpEndpointRouteBuilderExtensions
         return endpoints;
     }
 
-    static async Task<IResult> IssueTokenAsync(HttpContext context, IIdpTokenService tokens, CancellationToken ct)
+    static async Task<IResult> IssueTokenAsync(HttpContext context, ITokenService tokens, CancellationToken ct)
     {
         ApplyNoStore(context);
         if (!IsUrlEncodedForm(context))
@@ -89,7 +88,7 @@ public static class IdpEndpointRouteBuilderExtensions
             TokenJson);
     }
 
-    static async Task<IResult> RevokeTokenAsync(HttpContext context, IIdpTokenService tokens, CancellationToken ct)
+    static async Task<IResult> RevokeTokenAsync(HttpContext context, ITokenService tokens, CancellationToken ct)
     {
         ApplyNoStore(context);
         if (!IsUrlEncodedForm(context))
@@ -241,9 +240,12 @@ public static class IdpEndpointRouteBuilderExtensions
     static IResult TokenError(HttpContext context, string error, string? description = null)
     {
         ApplyNoStore(context);
-        var status = error == IdpTokenErrors.InvalidClient
-            ? StatusCodes.Status401Unauthorized
-            : StatusCodes.Status400BadRequest;
+        var status = error switch
+        {
+            IdpTokenErrors.InvalidClient => StatusCodes.Status401Unauthorized,
+            IdpTokenErrors.RateLimited => StatusCodes.Status429TooManyRequests,
+            _ => StatusCodes.Status400BadRequest,
+        };
         if (status == StatusCodes.Status401Unauthorized)
             context.Response.Headers.WWWAuthenticate = "Basic realm=\"idp\"";
 

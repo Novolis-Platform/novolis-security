@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Novolis.Security.Idp;
 using Novolis.Security.Idp.AspNetCore;
 using Novolis.Security.Idp.Storage;
@@ -35,7 +36,7 @@ public class IdpTokenServiceTests
     public async Task PasswordGrant_UnknownAccount_SameErrorAsBadPassword()
     {
         await using var provider = CreateProvider();
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         await SeedClientAsync(provider);
 
         var missing = await tokens.IssueAsync(PasswordRequest(AccountId.New(), "password"));
@@ -66,7 +67,7 @@ public class IdpTokenServiceTests
     public async Task Refresh_Rotates_AndReuseRevokesFamily()
     {
         await using var provider = CreateProvider();
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         await SeedClientAsync(provider);
         var account = await SeedAccountAsync(provider, "pw");
 
@@ -130,6 +131,51 @@ public class IdpTokenServiceTests
     }
 
     [Test]
+    public async Task DisabledClient_SameErrorAsBadSecret()
+    {
+        await using var provider = CreateProvider();
+        await SeedClientAsync(provider);
+        var clients = provider.GetRequiredService<IClientStore>();
+        var client = (await clients.FindByClientIdAsync("app"))!;
+        client.Disabled = true;
+        await clients.UpsertAsync(client);
+        var tokens = provider.GetRequiredService<ITokenService>();
+        var result = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = IdpGrantTypes.ClientCredentials,
+            ClientId = "app",
+            ClientSecret = "client-secret",
+        });
+        await Assert.That(result.Error).IsEqualTo(IdpTokenErrors.InvalidClient);
+    }
+
+    [Test]
+    public async Task EventStore_RecordsIssuedAndDenied()
+    {
+        var recorded = new List<SecurityEvent>();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<PasswordHasherOptions>(FastArgon);
+        IdpServiceCollectionExtensions.AddNovolisIdp(services, o =>
+        {
+            o.Issuer = "https://idp.test";
+            o.IsDevelopment = true;
+            o.AllowEphemeralSigningKey = true;
+        });
+        services.Replace(ServiceDescriptor.Singleton<IEventStore>(new RecordingEventStore(recorded)));
+        await using var provider = services.BuildServiceProvider();
+        await SeedClientAsync(provider);
+        var tokens = provider.GetRequiredService<ITokenService>();
+        await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = IdpGrantTypes.ClientCredentials,
+            ClientId = "app",
+            ClientSecret = "wrong",
+        });
+        await Assert.That(recorded.Any(e => e.Type == SecurityEventTypes.TokenDenied)).IsTrue();
+    }
+
+    [Test]
     public async Task EphemeralKey_ForbiddenOutsideDevelopment()
     {
         var services = new ServiceCollection();
@@ -140,7 +186,7 @@ public class IdpTokenServiceTests
             o.AllowEphemeralSigningKey = true;
         });
         await using var provider = services.BuildServiceProvider();
-        var act = () => provider.GetRequiredService<IIdpTokenService>();
+        var act = () => provider.GetRequiredService<ITokenService>();
         await Assert.That(act).Throws<InvalidOperationException>();
     }
 
@@ -156,7 +202,6 @@ public class IdpTokenServiceTests
             o.AllowEphemeralSigningKey = true;
         });
         await using var app = builder.Build();
-        app.UseRateLimiter();
         app.MapNovolisIdp();
         await app.StartAsync();
 
@@ -203,7 +248,7 @@ public class IdpTokenServiceTests
 
         await SeedClientAsync(provider);
         var account = await SeedAccountAsync(provider, "pw");
-        var tokens = provider.GetRequiredService<IIdpTokenService>();
+        var tokens = provider.GetRequiredService<ITokenService>();
         var issued = await tokens.IssueAsync(PasswordRequest(account, "pw"));
         await Assert.That(issued.Succeeded).IsTrue();
 
@@ -274,5 +319,14 @@ public class IdpTokenServiceTests
             CreatedUtc = DateTimeOffset.UtcNow,
         });
         return id;
+    }
+
+    sealed class RecordingEventStore(List<SecurityEvent> sink) : IEventStore
+    {
+        public ValueTask RecordAsync(SecurityEvent evt, CancellationToken ct = default)
+        {
+            sink.Add(evt);
+            return ValueTask.CompletedTask;
+        }
     }
 }

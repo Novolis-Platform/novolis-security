@@ -8,7 +8,7 @@
 
 # Novolis.Security.Idp.AspNetCore
 
-Maps a limited IDP onto ASP.NET Core: `POST /oauth/token`, `POST /oauth/revoke`, JWKS, and a minimal OpenID discovery document.
+Maps identity / authentication endpoints onto ASP.NET Core: `POST /oauth/token`, `POST /oauth/revoke`, JWKS, and a minimal OpenID discovery document. This is not a full IDP host — TLS, HSTS, and edge rate limits stay in the executable.
 
 The password grant's RFC 6749 `username` field is the **opaque `AccountId` GUID**, not an email. Resolving email/username happens in another system. Putting identifiers next to password hashes is a grave store-design violation — see `Novolis.Security.Idp.Abstractions`.
 
@@ -30,12 +30,11 @@ builder.Services.AddNovolisIdp(o =>
 builder.Services.AddAuthentication().AddNovolisJwtBearer();
 
 var app = builder.Build();
-app.UseRateLimiter();
 app.UseAuthentication();
 app.MapNovolisIdp();
 ```
 
-HTTPS is a host concern. Call `UseRateLimiter()` before `MapNovolisIdp()`.
+HTTPS and edge IP rate limits are host concerns. Token-attempt limits are enforced in `ICacheStore`, not ASP.NET `RateLimiter`.
 
 ## Support
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
@@ -8,17 +9,18 @@ using Novolis.Security.PasswordHashing;
 namespace Novolis.Security.Idp;
 
 /// <summary>Issues ES384 access tokens and rotating refresh tokens for confidential clients.</summary>
-public sealed class IdpTokenService : IIdpTokenService
+public sealed class IdpTokenService : ITokenService
 {
     readonly IdpOptions _options;
     readonly IAccountStore _accounts;
     readonly IClientStore _clients;
     readonly IRefreshTokenStore _refresh;
+    readonly ICacheStore _cache;
+    readonly IEventStore _events;
     readonly PasswordHasher _hasher;
     readonly SigningKeyRing _keys;
     readonly TimeProvider _time;
     readonly JsonWebTokenHandler _handler = new();
-    readonly SemaphoreSlim _rotation = new(1, 1);
     readonly string _dummyHash;
     static readonly HashSet<string> SupportedGrants =
     [
@@ -33,6 +35,8 @@ public sealed class IdpTokenService : IIdpTokenService
         IAccountStore accounts,
         IClientStore clients,
         IRefreshTokenStore refresh,
+        ICacheStore cache,
+        IEventStore events,
         PasswordHasher hasher,
         SigningKeyRing keys,
         TimeProvider time)
@@ -41,6 +45,8 @@ public sealed class IdpTokenService : IIdpTokenService
         _accounts = accounts;
         _clients = clients;
         _refresh = refresh;
+        _cache = cache;
+        _events = events;
         _hasher = hasher;
         _keys = keys;
         _time = time;
@@ -53,28 +59,37 @@ public sealed class IdpTokenService : IIdpTokenService
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.GrantType))
-            return TokenIssueResult.Fail(IdpTokenErrors.InvalidRequest, "grant_type is required.");
+            return await DenyAsync(request, IdpTokenErrors.InvalidRequest, account: null, ct).ConfigureAwait(false);
+
+        if (await IsRateLimitedAsync(request.ClientId, ct).ConfigureAwait(false))
+            return await RateLimitedAsync(request, ct).ConfigureAwait(false);
 
         var client = await AuthenticateClientAsync(request, ct).ConfigureAwait(false);
         if (client is null)
-            return TokenIssueResult.Fail(IdpTokenErrors.InvalidClient);
+            return await DenyAsync(request, IdpTokenErrors.InvalidClient, account: null, ct).ConfigureAwait(false);
+
+        if (client.Disabled)
+            return await DenyAsync(request, IdpTokenErrors.InvalidClient, account: null, ct).ConfigureAwait(false);
 
         if (!client.Confidential)
-            return TokenIssueResult.Fail(IdpTokenErrors.UnauthorizedClient, "Public clients are not accepted.");
+            return await DenyAsync(request, IdpTokenErrors.UnauthorizedClient, account: null, ct).ConfigureAwait(false);
 
         if (!SupportedGrants.Contains(request.GrantType))
-            return TokenIssueResult.Fail(IdpTokenErrors.UnsupportedGrantType);
+            return await DenyAsync(request, IdpTokenErrors.UnsupportedGrantType, account: null, ct).ConfigureAwait(false);
 
         if (!client.AllowedGrantTypes.Contains(request.GrantType, StringComparer.Ordinal))
-            return TokenIssueResult.Fail(IdpTokenErrors.UnauthorizedClient);
+            return await DenyAsync(request, IdpTokenErrors.UnauthorizedClient, account: null, ct).ConfigureAwait(false);
 
-        return request.GrantType switch
+        TokenIssueResult result = request.GrantType switch
         {
             IdpGrantTypes.Password => await IssuePasswordAsync(request, client, ct).ConfigureAwait(false),
             IdpGrantTypes.ClientCredentials => IssueClientCredentials(request, client),
             IdpGrantTypes.RefreshToken => await IssueRefreshAsync(request, client, ct).ConfigureAwait(false),
             _ => TokenIssueResult.Fail(IdpTokenErrors.UnsupportedGrantType),
         };
+
+        await ObserveAsync(request, result, request.AccountId?.Value, ct).ConfigureAwait(false);
+        return result;
     }
 
     /// <inheritdoc />
@@ -92,26 +107,18 @@ public sealed class IdpTokenService : IIdpTokenService
                 ClientSecret = clientSecret,
             },
             ct).ConfigureAwait(false);
-        if (client is null)
+        if (client is null || client.Disabled)
             return false;
 
-        await _rotation.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (!RefreshTokenFormat.TryParse(refreshToken, out var id, out var secret))
-                return true;
-
-            var row = await _refresh.TryGetAsync(id, ct).ConfigureAwait(false);
-            if (row is null || row.ClientId != client.Id || !RefreshTokenFormat.SecretEquals(row.SecretHash, secret))
-                return true;
-
-            await RevokeFamilyAsync(row.FamilyId, ct).ConfigureAwait(false);
+        if (!RefreshTokenFormat.TryParse(refreshToken, out var id, out var secret))
             return true;
-        }
-        finally
-        {
-            _rotation.Release();
-        }
+
+        var row = await _refresh.TryGetAsync(id, ct).ConfigureAwait(false);
+        if (row is null || row.ClientId != client.Id || !RefreshTokenFormat.SecretEquals(row.SecretHash, secret))
+            return true;
+
+        await RevokeFamilyAsync(row.FamilyId, ct).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>Parameters for validating access tokens issued by this service.</summary>
@@ -142,6 +149,13 @@ public sealed class IdpTokenService : IIdpTokenService
         return await _handler.ValidateTokenAsync(token, CreateValidationParameters()).ConfigureAwait(false);
     }
 
+    async ValueTask<bool> IsRateLimitedAsync(string? clientId, CancellationToken ct)
+    {
+        var key = "idp:rate:client:" + (string.IsNullOrWhiteSpace(clientId) ? "_" : clientId);
+        var count = await _cache.IncrementAsync(key, _options.TokenAttemptWindow, ct).ConfigureAwait(false);
+        return count > _options.TokenAttemptsPerWindow;
+    }
+
     async ValueTask<IdpClient?> AuthenticateClientAsync(TokenIssueRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.ClientId) || string.IsNullOrWhiteSpace(request.ClientSecret))
@@ -169,11 +183,21 @@ public sealed class IdpTokenService : IIdpTokenService
             return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
         }
 
+        var failKey = "idp:fail:account:" + accountId.Value.ToString("N", CultureInfo.InvariantCulture);
+        if (await _cache.GetAsync(failKey, ct).ConfigureAwait(false) >= _options.PasswordFailuresPerWindow)
+        {
+            _hasher.CompareHashedPassword(_dummyHash, password);
+            return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
+        }
+
         var account = await _accounts.TryGetAsync(accountId, ct).ConfigureAwait(false);
         var hash = account?.PasswordHash ?? _dummyHash;
         var passwordOk = _hasher.CompareHashedPassword(hash, password);
         if (account is null || account.Disabled || !passwordOk)
+        {
+            await _cache.IncrementAsync(failKey, _options.PasswordFailureWindow, ct).ConfigureAwait(false);
             return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
+        }
 
         if (!TryGrantScopes(request.Scope, client, out var scope, out var error))
             return error!;
@@ -195,50 +219,68 @@ public sealed class IdpTokenService : IIdpTokenService
 
     async ValueTask<TokenIssueResult> IssueRefreshAsync(TokenIssueRequest request, IdpClient client, CancellationToken ct)
     {
-        await _rotation.WaitAsync(ct).ConfigureAwait(false);
-        try
+        if (!RefreshTokenFormat.TryParse(request.RefreshToken, out var id, out var secret))
+            return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
+
+        var row = await _refresh.TryGetAsync(id, ct).ConfigureAwait(false);
+        if (row is null || row.ClientId != client.Id || !RefreshTokenFormat.SecretEquals(row.SecretHash, secret))
+            return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
+
+        var now = _time.GetUtcNow();
+        if (row.ExpiresUtc <= now)
+            return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
+
+        if (row.RevokedUtc is not null)
         {
-            if (!RefreshTokenFormat.TryParse(request.RefreshToken, out var id, out var secret))
-                return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
-
-            var row = await _refresh.TryGetAsync(id, ct).ConfigureAwait(false);
-            if (row is null || row.ClientId != client.Id || !RefreshTokenFormat.SecretEquals(row.SecretHash, secret))
-                return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
-
-            var now = _time.GetUtcNow();
-            if (row.ExpiresUtc <= now)
-                return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
-
-            if (row.RevokedUtc is not null)
-            {
-                await RevokeFamilyAsync(row.FamilyId, ct).ConfigureAwait(false);
-                return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
-            }
-
-            if (row.AccountId == Guid.Empty)
-                return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
-
-            var account = await _accounts.TryGetAsync(new AccountId(row.AccountId), ct).ConfigureAwait(false);
-            if (account is null || account.Disabled)
-                return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
-
-            if (!TryRefreshScope(request.Scope, row.Scope, client, out var scope, out var error))
-                return error!;
-
-            row.RevokedUtc = now;
-            var nextId = Guid.CreateVersion7();
-            row.ReplacedById = nextId;
-            await _refresh.UpsertAsync(row, ct).ConfigureAwait(false);
-
-            var access = CreateAccessToken(account.Id.ToString("D"), client, scope);
-            var refresh = await CreateRefreshTokenAsync(account.Id, client.Id, row.FamilyId, scope, ct, nextId)
-                .ConfigureAwait(false);
-            return TokenIssueResult.Ok(access, ExpiresInSeconds(), refresh, scope);
+            await RevokeFamilyAsync(row.FamilyId, ct).ConfigureAwait(false);
+            await ObserveTypeAsync(SecurityEventTypes.RefreshReuse, request, row.AccountId, ct).ConfigureAwait(false);
+            return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
         }
-        finally
+
+        if (row.AccountId == Guid.Empty)
+            return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
+
+        var account = await _accounts.TryGetAsync(new AccountId(row.AccountId), ct).ConfigureAwait(false);
+        if (account is null || account.Disabled)
+            return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
+
+        if (!TryRefreshScope(request.Scope, row.Scope, client, out var scope, out var error))
+            return error!;
+
+        var leaseKey = "idp:rotate:" + id.ToString("N", CultureInfo.InvariantCulture);
+        var leased = await _cache.TryCreateAsync(leaseKey, _options.RefreshTokenLifetime, ct).ConfigureAwait(false);
+        if (!leased)
         {
-            _rotation.Release();
+            await RevokeFamilyAsync(row.FamilyId, ct).ConfigureAwait(false);
+            await ObserveTypeAsync(SecurityEventTypes.RefreshReuse, request, row.AccountId, ct).ConfigureAwait(false);
+            return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
         }
+
+        var nextId = Guid.CreateVersion7();
+        var wire = RefreshTokenFormat.Create(nextId, out var nextSecret);
+        var next = new IdpRefreshToken
+        {
+            Id = nextId,
+            FamilyId = row.FamilyId,
+            AccountId = row.AccountId,
+            ClientId = client.Id,
+            SecretHash = RefreshTokenFormat.HashSecret(nextSecret),
+            Scope = scope,
+            ExpiresUtc = now + _options.RefreshTokenLifetime,
+        };
+        CryptographicOperations.ZeroMemory(nextSecret);
+
+        var rotated = await _refresh.TryRotateAsync(id, next, ct).ConfigureAwait(false);
+        if (!rotated)
+        {
+            await RevokeFamilyAsync(row.FamilyId, ct).ConfigureAwait(false);
+            await ObserveTypeAsync(SecurityEventTypes.RefreshReuse, request, row.AccountId, ct).ConfigureAwait(false);
+            return TokenIssueResult.Fail(IdpTokenErrors.InvalidGrant);
+        }
+
+        await ObserveTypeAsync(SecurityEventTypes.RefreshRotated, request, row.AccountId, ct).ConfigureAwait(false);
+        var access = CreateAccessToken(account.Id.ToString("D"), client, scope);
+        return TokenIssueResult.Ok(access, ExpiresInSeconds(), wire, scope);
     }
 
     async ValueTask RevokeFamilyAsync(Guid familyId, CancellationToken ct)
@@ -318,19 +360,23 @@ public sealed class IdpTokenService : IIdpTokenService
             ? []
             : requested.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        IEnumerable<string> granted = asked.Length == 0
-            ? allowed
-            : asked.Where(s => allowed.Contains(s, StringComparer.Ordinal));
-
-        var list = granted.Distinct(StringComparer.Ordinal).ToArray();
-        if (asked.Length > 0 && list.Length == 0)
+        if (asked.Length == 0)
         {
-            scope = "";
-            error = TokenIssueResult.Fail(IdpTokenErrors.InvalidScope);
-            return false;
+            scope = string.Join(' ', allowed.Distinct(StringComparer.Ordinal));
+            return true;
         }
 
-        scope = string.Join(' ', list);
+        foreach (var item in asked)
+        {
+            if (!allowed.Contains(item, StringComparer.Ordinal))
+            {
+                scope = "";
+                error = TokenIssueResult.Fail(IdpTokenErrors.InvalidScope);
+                return false;
+            }
+        }
+
+        scope = string.Join(' ', asked.Distinct(StringComparer.Ordinal));
         return true;
     }
 
@@ -374,6 +420,52 @@ public sealed class IdpTokenService : IIdpTokenService
     }
 
     int ExpiresInSeconds() => (int)Math.Ceiling(_options.AccessTokenLifetime.TotalSeconds);
+
+    async ValueTask<TokenIssueResult> DenyAsync(TokenIssueRequest request, string error, Guid? account, CancellationToken ct)
+    {
+        var result = TokenIssueResult.Fail(error);
+        await ObserveAsync(request, result, account, ct).ConfigureAwait(false);
+        return result;
+    }
+
+    async ValueTask<TokenIssueResult> RateLimitedAsync(TokenIssueRequest request, CancellationToken ct)
+    {
+        await ObserveTypeAsync(SecurityEventTypes.RateLimited, request, request.AccountId?.Value, ct).ConfigureAwait(false);
+        return TokenIssueResult.Fail(IdpTokenErrors.RateLimited);
+    }
+
+    async ValueTask ObserveAsync(TokenIssueRequest request, TokenIssueResult result, Guid? accountId, CancellationToken ct)
+    {
+        var type = result.Succeeded ? SecurityEventTypes.TokenIssued : SecurityEventTypes.TokenDenied;
+        await ObserveTypeAsync(type, request, accountId, ct, result.Error).ConfigureAwait(false);
+    }
+
+    async ValueTask ObserveTypeAsync(
+        string type,
+        TokenIssueRequest request,
+        Guid? accountId,
+        CancellationToken ct,
+        string? error = null)
+    {
+        try
+        {
+            await _events.RecordAsync(
+                new SecurityEvent
+                {
+                    Utc = _time.GetUtcNow(),
+                    Type = type,
+                    ClientId = request.ClientId,
+                    AccountId = accountId,
+                    GrantType = request.GrantType,
+                    Error = error,
+                },
+                ct).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Observation must never fail closed on the token path.
+        }
+    }
 
     void ValidateDevelopmentGuards()
     {

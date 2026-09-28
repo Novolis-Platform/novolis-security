@@ -1,8 +1,5 @@
-using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -10,13 +7,10 @@ using Novolis.Security.Idp;
 
 namespace Novolis.Security.Idp.AspNetCore;
 
-/// <summary>Registers IDP services, token-endpoint rate limiting, and in-process JWT bearer validation.</summary>
+/// <summary>Registers identity services and in-process JWT bearer validation. Edge IP limits stay on the host.</summary>
 public static class IdpAspNetCoreServiceCollectionExtensions
 {
-    /// <summary>Policy name applied to <c>POST /oauth/token</c>.</summary>
-    public const string TokenRateLimitPolicy = "idp-token";
-
-    /// <summary>Adds <see cref="IdpServiceCollectionExtensions.AddNovolisIdp"/> plus a fixed-window limiter on the token endpoint.</summary>
+    /// <summary>Adds <see cref="IdpServiceCollectionExtensions.AddNovolisIdp"/>. Attempt limits use <see cref="ICacheStore"/>, not ASP.NET RateLimiter.</summary>
     public static IServiceCollection AddNovolisIdp(
         this IServiceCollection services,
         Action<IdpOptions>? configure = null)
@@ -25,24 +19,6 @@ public static class IdpAspNetCoreServiceCollectionExtensions
         IdpServiceCollectionExtensions.AddNovolisIdp(services, configure);
         services.AddOptions<IdpOptions>()
             .Configure<IHostEnvironment>((options, env) => options.IsDevelopment = env.IsDevelopment());
-        services.AddRateLimiter(limiter =>
-        {
-            limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            limiter.AddPolicy(TokenRateLimitPolicy, httpContext =>
-            {
-                // Partition by IP only. Never read the form here — malformed bodies
-                // (null bytes) must not 500 in the limiter before the endpoint runs.
-                var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                return RateLimitPartition.GetFixedWindowLimiter(
-                    ip,
-                    _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = 30,
-                        Window = TimeSpan.FromMinutes(1),
-                        QueueLimit = 0,
-                    });
-            });
-        });
         return services;
     }
 
@@ -56,10 +32,10 @@ public static class IdpAspNetCoreServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(builder);
         builder.AddJwtBearer();
         builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-            .Configure<IdpTokenService>((options, idp) =>
+            .Configure<IdpTokenService>((options, tokens) =>
             {
                 options.MapInboundClaims = false;
-                options.TokenValidationParameters = idp.CreateValidationParameters();
+                options.TokenValidationParameters = tokens.CreateValidationParameters();
             });
         return builder;
     }

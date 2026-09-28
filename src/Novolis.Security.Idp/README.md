@@ -8,7 +8,7 @@
 
 # Novolis.Security.Idp
 
-First-party token issuer: **ECDSA P-384 (ES384)** access tokens, **Argon2id** password and client-secret hashes, rotating opaque refresh tokens.
+First-party identity / authentication library: **ECDSA P-384 (ES384)** access tokens, **Argon2id** password and client-secret hashes, rotating opaque refresh tokens. A full IDP host is an executable that composes this package — this library is not that host.
 
 ## Credential store isolation (non-negotiable)
 
@@ -41,7 +41,7 @@ await accounts.UpsertAsync(new IdpAccount
     CreatedUtc = DateTimeOffset.UtcNow,
 });
 
-var tokens = sp.GetRequiredService<IIdpTokenService>();
+var tokens = sp.GetRequiredService<ITokenService>();
 var issued = await tokens.IssueAsync(new TokenIssueRequest
 {
     GrantType = IdpGrantTypes.Password,
