@@ -80,7 +80,7 @@ public class IdpTokenServiceTests
             RefreshToken = first.RefreshToken,
         });
         await Assert.That(rotated.Succeeded).IsTrue();
-        await Assert.That(rotated.RefreshToken).IsNotEqualTo(first.RefreshToken);
+        await Assert.That(rotated.RefreshToken)!.IsNotEqualTo(first.RefreshToken);
 
         var replay = await tokens.IssueAsync(new TokenIssueRequest
         {
