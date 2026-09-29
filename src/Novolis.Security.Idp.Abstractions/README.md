@@ -28,6 +28,11 @@ dotnet add package Novolis.Security.Idp.Abstractions
 
 **Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download) (`net10.0`).
 
+## Quick start
+
+Implement the store contracts below, or compose the in-memory and storage
+adapters from the related identity packages.
+
 ## What to implement
 
 | Store | Lookup |

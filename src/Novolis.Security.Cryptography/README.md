@@ -18,6 +18,8 @@ Do not use `Random`, `Equals` on secret strings, or ad-hoc SHA-256 stretching fo
 dotnet add package Novolis.Security.Cryptography
 ```
 
+## Quick start
+
 ```csharp
 var key = SecureRandom.GetBytes(32);
 var ok = ConstantTime.Equals(left, right);

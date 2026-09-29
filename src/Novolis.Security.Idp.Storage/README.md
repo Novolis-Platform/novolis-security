@@ -20,6 +20,8 @@ Username / `client_id` scans use `IRepository.All()` — acceptable for this lim
 dotnet add package Novolis.Security.Idp.Storage
 ```
 
+## Quick start
+
 ```csharp
 services.AddNovolisIdp(o => { /* ... */ });
 services.AddStorage(b => b.AddSqliteProvider(...)); // host chooses provider
