@@ -7,9 +7,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" />
-    <PackageReference Include="Novolis.Storage.Abstractions" />
-    <PackageReference Include="Novolis.Storage.Json" />
-    <PackageReference Include="Novolis.Storage.Sqlite" />
+    <LibraryReference Include="Novolis.Storage.Abstractions" />
+    <LibraryReference Include="Novolis.Storage.Json" />
+    <LibraryReference Include="Novolis.Storage.Sqlite" />
     <PackageReference Include="TUnit" />
   </ItemGroup>
   <ItemGroup>

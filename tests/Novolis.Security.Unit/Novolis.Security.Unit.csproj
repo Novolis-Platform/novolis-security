@@ -9,9 +9,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
-    <PackageReference Include="Novolis.Testing.Logging" />
-    <PackageReference Include="Novolis.Storage.Abstractions" />
-    <PackageReference Include="Novolis.Storage.InMemory" />
+    <LibraryReference Include="Novolis.Testing.Logging" />
+    <LibraryReference Include="Novolis.Storage.Abstractions" />
+    <LibraryReference Include="Novolis.Storage.InMemory" />
     <PackageReference Include="TUnit" />
   </ItemGroup>
   <ItemGroup>

@@ -6,6 +6,6 @@
     <RootNamespace>Novolis.Security.Idp</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Novolis.Storage.Abstractions" />
+    <LibraryReference Include="Novolis.Storage.Abstractions" />
   </ItemGroup>
 </Project>
