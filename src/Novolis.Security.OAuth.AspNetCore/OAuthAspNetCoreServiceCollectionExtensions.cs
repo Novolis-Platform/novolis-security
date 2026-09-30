@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -7,10 +7,10 @@ using Novolis.Security.OAuth;
 
 namespace Novolis.Security.OAuth.AspNetCore;
 
-/// <summary>Registers identity services and in-process JWT bearer validation. Edge IP limits stay on the host.</summary>
+/// <summary>Registers OAuth protocol services and resource-server token validation.</summary>
 public static class OAuthAspNetCoreServiceCollectionExtensions
 {
-    /// <summary>Adds <see cref="OAuthServiceCollectionExtensions.AddNovolisOAuth"/>. Attempt limits use <see cref="ICacheStore"/>, not ASP.NET RateLimiter.</summary>
+    /// <summary>Adds the OAuth core and development-aware defaults.</summary>
     public static IServiceCollection AddNovolisOAuth(
         this IServiceCollection services,
         Action<OAuthOptions>? configure = null)
@@ -22,10 +22,7 @@ public static class OAuthAspNetCoreServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>
-    /// JwtBearer that validates ES384 tokens with this process's <see cref="OAuthTokenService"/>.
-    /// Split-host APIs should set <c>Authority</c> on JwtBearerOptions instead.
-    /// </summary>
+    /// <summary>Configures in-process validation against this authorization server's key ring.</summary>
     public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddNovolisJwtBearer(
         this Microsoft.AspNetCore.Authentication.AuthenticationBuilder builder)
     {
@@ -37,6 +34,32 @@ public static class OAuthAspNetCoreServiceCollectionExtensions
                 options.MapInboundClaims = false;
                 options.TokenValidationParameters = tokens.CreateValidationParameters();
             });
+        return builder;
+    }
+
+    /// <summary>
+    /// Configures a resource server to discover issuer metadata and JWKS from an OAuth authority.
+    /// </summary>
+    public static AuthenticationBuilder AddNovolisBearer(
+        this AuthenticationBuilder builder,
+        Uri issuer,
+        string audience)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(issuer);
+        ArgumentException.ThrowIfNullOrEmpty(audience);
+
+        builder.AddJwtBearer(options =>
+        {
+            var authority = issuer.ToString().TrimEnd('/');
+            options.Authority = authority;
+            options.MetadataAddress = authority + "/.well-known/oauth-authorization-server";
+            options.Audience = audience;
+            options.MapInboundClaims = false;
+            options.RequireHttpsMetadata = !issuer.IsLoopback;
+            options.TokenValidationParameters.ValidAlgorithms =
+                [Microsoft.IdentityModel.Tokens.SecurityAlgorithms.EcdsaSha384];
+        });
         return builder;
     }
 }

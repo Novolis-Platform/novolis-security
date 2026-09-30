@@ -3,7 +3,7 @@ using Novolis.Security.Authentication;
 namespace Novolis.Security.OAuth;
 
 /// <summary>Short-lived, single-use Authorization Code record.</summary>
-public sealed class AuthorizationCodeRecord
+public sealed class AuthorizationCodeRecord : Novolis.Storage.Abstractions.IHasId
 {
     /// <summary>Internal code identifier carried in the opaque code.</summary>
     public Guid Id { get; set; }

@@ -7,10 +7,18 @@
     <Project Path="src/Novolis.Security.Encryption/Novolis.Security.Encryption.csproj" />
     <Project Path="src/Novolis.Security.HaveIBeenPwned/Novolis.Security.HaveIBeenPwned.csproj" />
     <Project Path="src/Novolis.Security.SecureText/Novolis.Security.SecureText.csproj" />
+    <Project Path="src/Novolis.Security.Authentication.Abstractions/Novolis.Security.Authentication.Abstractions.csproj" />
+    <Project Path="src/Novolis.Security.Authentication/Novolis.Security.Authentication.csproj" />
+    <Project Path="src/Novolis.Security.Authentication.AspNetCore/Novolis.Security.Authentication.AspNetCore.csproj" />
+    <Project Path="src/Novolis.Security.Authentication.Storage/Novolis.Security.Authentication.Storage.csproj" />
     <Project Path="src/Novolis.Security.OAuth.Abstractions/Novolis.Security.OAuth.Abstractions.csproj" />
     <Project Path="src/Novolis.Security.OAuth/Novolis.Security.OAuth.csproj" />
     <Project Path="src/Novolis.Security.OAuth.AspNetCore/Novolis.Security.OAuth.AspNetCore.csproj" />
     <Project Path="src/Novolis.Security.OAuth.Storage/Novolis.Security.OAuth.Storage.csproj" />
+    <Project Path="src/Novolis.Security.Authorization.Abstractions/Novolis.Security.Authorization.Abstractions.csproj" />
+    <Project Path="src/Novolis.Security.Authorization/Novolis.Security.Authorization.csproj" />
+    <Project Path="src/Novolis.Security.Authorization.AspNetCore/Novolis.Security.Authorization.AspNetCore.csproj" />
+    <Project Path="src/Novolis.Security.Authorization.Storage/Novolis.Security.Authorization.Storage.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Novolis.Security.Unit/Novolis.Security.Unit.csproj" />

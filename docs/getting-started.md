@@ -1,6 +1,6 @@
 # Getting started
 
-Password hashing (Argon2id), AES-256-GCM encryption, HaveIBeenPwned helpers, and a limited JWT identity library.
+Password hashing (Argon2id), AES-256-GCM encryption, HaveIBeenPwned helpers, and the Authentication / OAuth / Authorization stack.
 
 Published guide: [https://novolis-platform.github.io/.github/novolis-security/](https://novolis-platform.github.io/.github/novolis-security/)
 
@@ -25,6 +25,7 @@ Local multi-repo iteration uses ProjectReference mode via `d:\novolis\Novolis.Pl
 
 ## Next
 
+- [REFACTORING_SPEC.md](../REFACTORING_SPEC.md) — Authentication, OAuth, and Authorization end-state
 - [design.md](design.md) — layer placement and non-goals
 - [owasp-security-evaluation.md](owasp-security-evaluation.md) — OWASP evaluation of identity, hashing, and crypto libraries
 - [release.md](release.md) — publish cadence

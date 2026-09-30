@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Authorization</PackageId>
+    <Description>Tenant-scoped authorization engine with groups, roles, composite roles, and default deny.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Authorization</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Novolis.Security.Authorization.Abstractions\Novolis.Security.Authorization.Abstractions.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+</Project>

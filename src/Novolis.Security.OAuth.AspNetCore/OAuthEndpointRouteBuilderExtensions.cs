@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -5,60 +6,117 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Novolis.Security.Authentication;
 using Novolis.Security.OAuth;
 
 namespace Novolis.Security.OAuth.AspNetCore;
 
-/// <summary>Maps token, revoke, JWKS, and discovery endpoints.</summary>
+/// <summary>Maps the standards-oriented OAuth authorization-server endpoints.</summary>
 public static class OAuthEndpointRouteBuilderExtensions
 {
+    /// <summary>Cookie name carrying the browser authentication session used by <c>/oauth/authorize</c>.</summary>
+    public const string AuthenticationSessionCookie = "Novolis.Authentication.Session";
+
     static readonly JsonSerializerOptions TokenJson = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    /// <summary>
-    /// Maps <c>/oauth/token</c>, <c>/oauth/revoke</c>, <c>/.well-known/jwks.json</c>,
-    /// and <c>/.well-known/openid-configuration</c>.
-    /// </summary>
-    /// <remarks>
-    /// Password grant form field <c>username</c> is the opaque <see cref="CredentialReference"/> GUID.
-    /// Do not send email or a login name — those are resolved in a different system.
-    /// </remarks>
+    /// <summary>Maps Authorization Code, token, revocation, discovery, and JWKS endpoints.</summary>
     public static IEndpointRouteBuilder MapNovolisOAuth(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        endpoints.MapPost("/oauth/token", IssueTokenAsync)
-            .DisableAntiforgery();
+        endpoints.MapGet("/oauth/authorize", AuthorizeAsync);
+        endpoints.MapPost("/oauth/token", IssueTokenAsync).DisableAntiforgery();
         endpoints.MapPost("/oauth/revoke", RevokeTokenAsync).DisableAntiforgery();
+        endpoints.MapGet("/.well-known/oauth-authorization-server", Discovery);
         endpoints.MapGet("/.well-known/jwks.json", Jwks);
-        endpoints.MapGet("/.well-known/openid-configuration", Discovery);
+
+        var options = endpoints.ServiceProvider.GetService<IOptions<OAuthOptions>>();
+        if (options?.Value.EnableOpenIdConfigurationAlias == true)
+            endpoints.MapGet("/.well-known/openid-configuration", Discovery);
+
         return endpoints;
     }
 
-    static async Task<IResult> IssueTokenAsync(HttpContext context, ITokenService tokens, CancellationToken ct)
+    static async Task<IResult> AuthorizeAsync(
+        HttpContext context,
+        IClientStore clients,
+        ITokenService tokens,
+        CancellationToken cancellationToken)
+    {
+        var request = context.Request.Query;
+        var responseType = request["response_type"].ToString();
+        var clientId = request["client_id"].ToString();
+        var redirectUri = request["redirect_uri"].ToString();
+        var state = request["state"].ToString();
+        var client = await clients.FindByClientIdAsync(clientId, cancellationToken).ConfigureAwait(false);
+
+        if (client is null || client.Disabled)
+            return OAuthError(context, OAuthTokenErrors.InvalidClient);
+        if (!string.Equals(responseType, "code", StringComparison.Ordinal))
+            return OAuthError(context, OAuthTokenErrors.InvalidRequest);
+        if (!client.AllowedGrantTypes.Contains(OAuthGrantTypes.AuthorizationCode, StringComparer.Ordinal))
+            return OAuthError(context, OAuthTokenErrors.UnauthorizedClient);
+        if (!client.AllowedRedirectUris.Contains(redirectUri, StringComparer.Ordinal))
+            return OAuthError(context, OAuthTokenErrors.InvalidRequest);
+
+        var challenge = request["code_challenge"].ToString();
+        var method = request["code_challenge_method"].ToString();
+        if (string.IsNullOrWhiteSpace(challenge)
+            || !string.Equals(method, "S256", StringComparison.Ordinal))
+            return RedirectOrError(context, redirectUri, state, OAuthTokenErrors.InvalidRequest);
+
+        var authentication = context.RequestServices.GetService<IAuthenticationService>();
+        var sessionId = context.Request.Cookies[AuthenticationSessionCookie];
+        var identityId = authentication is null
+            ? null
+            : await authentication.GetAuthenticatedIdentityAsync(sessionId ?? "", cancellationToken)
+                .ConfigureAwait(false);
+        if (identityId is null)
+            return RedirectOrError(context, redirectUri, state, OAuthTokenErrors.AccessDenied);
+
+        var issued = await tokens.IssueAuthorizationCodeAsync(
+            new AuthorizationCodeIssueRequest
+            {
+                ClientId = clientId,
+                RedirectUri = redirectUri,
+                IdentityId = identityId.Value,
+                Scope = request["scope"].ToString(),
+                Audience = request["audience"].ToString(),
+                CodeChallenge = challenge,
+                CodeChallengeMethod = method,
+            },
+            cancellationToken).ConfigureAwait(false);
+        if (!issued.Succeeded || issued.Code is null)
+            return RedirectOrError(context, redirectUri, state, issued.Error ?? OAuthTokenErrors.InvalidRequest);
+
+        var location = QueryHelpers.AddQueryString(
+            redirectUri,
+            new Dictionary<string, string?>
+            {
+                ["code"] = issued.Code,
+                ["state"] = string.IsNullOrWhiteSpace(state) ? null : state,
+            });
+        return Results.Redirect(location, permanent: false, preserveMethod: false);
+    }
+
+    static async Task<IResult> IssueTokenAsync(
+        HttpContext context,
+        ITokenService tokens,
+        CancellationToken cancellationToken)
     {
         ApplyNoStore(context);
-        if (!IsUrlEncodedForm(context))
-            return TokenError(context, OAuthTokenErrors.InvalidRequest);
-
-        if (!await TryReadFormAsync(context, ct).ConfigureAwait(false))
+        if (!IsUrlEncodedForm(context) || !await TryReadFormAsync(context, cancellationToken).ConfigureAwait(false))
             return TokenError(context, OAuthTokenErrors.InvalidRequest);
 
         var form = context.Request.Form;
         if (!TryResolveClient(context, form, out var clientId, out var clientSecret, out var clientError))
             return clientError!;
-
-        var username = form["username"].ToString();
-        CredentialReference? accountId = null;
-        if (!string.IsNullOrWhiteSpace(username))
-        {
-            if (!TryParseCredentialReference(username, out var guid) || guid == Guid.Empty)
-                return TokenError(context, OAuthTokenErrors.InvalidGrant);
-            accountId = new CredentialReference(guid);
-        }
 
         var result = await tokens.IssueAsync(
             new TokenIssueRequest
@@ -66,12 +124,14 @@ public static class OAuthEndpointRouteBuilderExtensions
                 GrantType = form["grant_type"].ToString(),
                 ClientId = clientId,
                 ClientSecret = clientSecret,
-                CredentialReference = accountId,
-                Password = form["password"].ToString(),
+                AuthorizationCode = form["code"].ToString(),
+                RedirectUri = form["redirect_uri"].ToString(),
+                CodeVerifier = form["code_verifier"].ToString(),
                 RefreshToken = form["refresh_token"].ToString(),
                 Scope = form["scope"].ToString(),
+                Audience = form["audience"].ToString(),
             },
-            ct).ConfigureAwait(false);
+            cancellationToken).ConfigureAwait(false);
 
         if (!result.Succeeded)
             return TokenError(context, result.Error ?? OAuthTokenErrors.InvalidRequest, result.ErrorDescription);
@@ -88,52 +148,53 @@ public static class OAuthEndpointRouteBuilderExtensions
             TokenJson);
     }
 
-    static async Task<IResult> RevokeTokenAsync(HttpContext context, ITokenService tokens, CancellationToken ct)
+    static async Task<IResult> RevokeTokenAsync(
+        HttpContext context,
+        ITokenService tokens,
+        CancellationToken cancellationToken)
     {
         ApplyNoStore(context);
-        if (!IsUrlEncodedForm(context))
-            return TokenError(context, OAuthTokenErrors.InvalidRequest);
-
-        if (!await TryReadFormAsync(context, ct).ConfigureAwait(false))
+        if (!IsUrlEncodedForm(context) || !await TryReadFormAsync(context, cancellationToken).ConfigureAwait(false))
             return TokenError(context, OAuthTokenErrors.InvalidRequest);
 
         var form = context.Request.Form;
         if (!TryResolveClient(context, form, out var clientId, out var clientSecret, out var clientError))
             return clientError!;
 
-        var token = form["token"].ToString();
-        if (string.IsNullOrWhiteSpace(token))
-            token = form["refresh_token"].ToString();
-
-        var authenticated = await tokens.RevokeRefreshTokenAsync(token, clientId, clientSecret, ct).ConfigureAwait(false);
-        if (!authenticated)
-            return TokenError(context, OAuthTokenErrors.InvalidClient);
-
-        return Results.Ok();
+        var accepted = await tokens.RevokeAsync(
+            form["token"].ToString(),
+            clientId,
+            clientSecret,
+            form["token_type_hint"].ToString(),
+            cancellationToken).ConfigureAwait(false);
+        return accepted ? Results.Ok() : TokenError(context, OAuthTokenErrors.InvalidClient);
     }
 
-    static IResult Jwks(OAuthTokenService tokens) => Results.Json(ToPublicJwks(tokens.GetJsonWebKeySet()));
+    static IResult Jwks(OAuthTokenService tokens) =>
+        Results.Json(ToPublicJwks(tokens.GetJsonWebKeySet()), TokenJson);
 
     static IResult Discovery(IOptions<OAuthOptions> options)
     {
-        var issuer = options.Value.Issuer.TrimEnd('/');
-        return Results.Json(new
-        {
-            issuer,
-            token_endpoint = $"{issuer}/oauth/token",
-            revocation_endpoint = $"{issuer}/oauth/revoke",
-            jwks_uri = $"{issuer}/.well-known/jwks.json",
-            grant_types_supported = new[]
+        var issuer = options.Value.Issuer.ToString().TrimEnd('/');
+        return Results.Json(
+            new
             {
-                OAuthGrantTypes.ClientCredentials,
-                OAuthGrantTypes.Password,
-                OAuthGrantTypes.RefreshToken,
+                issuer,
+                authorization_endpoint = $"{issuer}/oauth/authorize",
+                token_endpoint = $"{issuer}/oauth/token",
+                revocation_endpoint = $"{issuer}/oauth/revoke",
+                jwks_uri = $"{issuer}/.well-known/jwks.json",
+                grant_types_supported = new[]
+                {
+                    OAuthGrantTypes.AuthorizationCode,
+                    OAuthGrantTypes.ClientCredentials,
+                    OAuthGrantTypes.RefreshToken,
+                },
+                response_types_supported = new[] { "code" },
+                code_challenge_methods_supported = new[] { "S256" },
+                token_endpoint_auth_methods_supported = new[] { "client_secret_post", "client_secret_basic" },
             },
-            token_endpoint_auth_methods_supported = new[] { "client_secret_post", "client_secret_basic" },
-            id_token_signing_alg_values_supported = new[] { "ES384" },
-            response_types_supported = new[] { "token" },
-            authorization_endpoint = (string?)null,
-        }, TokenJson);
+            TokenJson);
     }
 
     static object ToPublicJwks(Microsoft.IdentityModel.Tokens.JsonWebKeySet set) => new
@@ -178,17 +239,20 @@ public static class OAuthEndpointRouteBuilderExtensions
         }
 
         clientId = formId;
-        clientSecret = formSecret;
+        clientSecret = string.IsNullOrEmpty(formSecret) ? null : formSecret;
         return true;
     }
 
-    static void TryReadClientFromBasic(HttpContext context, out string? clientId, out string? clientSecret)
+    static void TryReadClientFromBasic(
+        HttpContext context,
+        out string? clientId,
+        out string? clientSecret)
     {
         clientId = null;
         clientSecret = null;
-        if (!AuthenticationHeaderValue.TryParse(context.Request.Headers.Authorization, out var header))
-            return;
-        if (!string.Equals(header.Scheme, "Basic", StringComparison.OrdinalIgnoreCase) || header.Parameter is null)
+        if (!AuthenticationHeaderValue.TryParse(context.Request.Headers.Authorization, out var header)
+            || !string.Equals(header.Scheme, "Basic", StringComparison.OrdinalIgnoreCase)
+            || header.Parameter is null)
             return;
 
         try
@@ -202,15 +266,15 @@ public static class OAuthEndpointRouteBuilderExtensions
         }
         catch (FormatException)
         {
-            // Treat as missing client credentials; IssueAsync returns invalid_client.
+            // Missing credentials are handled as invalid_client by the token service.
         }
     }
 
-    static async Task<bool> TryReadFormAsync(HttpContext context, CancellationToken ct)
+    static async Task<bool> TryReadFormAsync(HttpContext context, CancellationToken cancellationToken)
     {
         try
         {
-            _ = await context.Request.ReadFormAsync(ct).ConfigureAwait(false);
+            _ = await context.Request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
         catch (InvalidDataException)
@@ -223,18 +287,33 @@ public static class OAuthEndpointRouteBuilderExtensions
         }
     }
 
-    static bool IsUrlEncodedForm(HttpContext context)
+    static bool IsUrlEncodedForm(HttpContext context) =>
+        context.Request.ContentType is { } contentType
+        && contentType.StartsWith("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase);
+
+    static IResult RedirectOrError(
+        HttpContext context,
+        string redirectUri,
+        string? state,
+        string error)
     {
-        var contentType = context.Request.ContentType;
-        return contentType is not null
-               && contentType.StartsWith("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(redirectUri))
+            return OAuthError(context, error);
+
+        var location = QueryHelpers.AddQueryString(
+            redirectUri,
+            new Dictionary<string, string?>
+            {
+                ["error"] = error,
+                ["state"] = string.IsNullOrWhiteSpace(state) ? null : state,
+            });
+        return Results.Redirect(location, permanent: false, preserveMethod: false);
     }
 
-    static bool TryParseCredentialReference(string username, out Guid guid)
+    static IResult OAuthError(HttpContext context, string error, string? description = null)
     {
-        if (Guid.TryParseExact(username, "D", out guid))
-            return true;
-        return Guid.TryParseExact(username, "N", out guid);
+        ApplyNoStore(context);
+        return Results.Json(new { error, error_description = description }, TokenJson, statusCode: StatusCodes.Status400BadRequest);
     }
 
     static IResult TokenError(HttpContext context, string error, string? description = null)
@@ -247,7 +326,7 @@ public static class OAuthEndpointRouteBuilderExtensions
             _ => StatusCodes.Status400BadRequest,
         };
         if (status == StatusCodes.Status401Unauthorized)
-            context.Response.Headers.WWWAuthenticate = "Basic realm=\"idp\"";
+            context.Response.Headers.WWWAuthenticate = "Basic realm=\"oauth\"";
 
         return Results.Json(new { error, error_description = description }, TokenJson, statusCode: status);
     }

@@ -24,6 +24,54 @@
         "docs/secure-text.md",
         "Novolis.Security.slnx"
       ]
+    },
+    "Novolis.Security.Authentication.Abstractions": {
+      "project": "src/Novolis.Security.Authentication.Abstractions/Novolis.Security.Authentication.Abstractions.csproj",
+      "paths": ["src/Novolis.Security.Authentication.Abstractions/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.Authentication": {
+      "project": "src/Novolis.Security.Authentication/Novolis.Security.Authentication.csproj",
+      "paths": ["src/Novolis.Security.Authentication/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.Authentication.AspNetCore": {
+      "project": "src/Novolis.Security.Authentication.AspNetCore/Novolis.Security.Authentication.AspNetCore.csproj",
+      "paths": ["src/Novolis.Security.Authentication.AspNetCore/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.Authentication.Storage": {
+      "project": "src/Novolis.Security.Authentication.Storage/Novolis.Security.Authentication.Storage.csproj",
+      "paths": ["src/Novolis.Security.Authentication.Storage/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.OAuth.Abstractions": {
+      "project": "src/Novolis.Security.OAuth.Abstractions/Novolis.Security.OAuth.Abstractions.csproj",
+      "paths": ["src/Novolis.Security.OAuth.Abstractions/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.OAuth": {
+      "project": "src/Novolis.Security.OAuth/Novolis.Security.OAuth.csproj",
+      "paths": ["src/Novolis.Security.OAuth/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.OAuth.AspNetCore": {
+      "project": "src/Novolis.Security.OAuth.AspNetCore/Novolis.Security.OAuth.AspNetCore.csproj",
+      "paths": ["src/Novolis.Security.OAuth.AspNetCore/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.OAuth.Storage": {
+      "project": "src/Novolis.Security.OAuth.Storage/Novolis.Security.OAuth.Storage.csproj",
+      "paths": ["src/Novolis.Security.OAuth.Storage/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.Authorization.Abstractions": {
+      "project": "src/Novolis.Security.Authorization.Abstractions/Novolis.Security.Authorization.Abstractions.csproj",
+      "paths": ["src/Novolis.Security.Authorization.Abstractions/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.Authorization": {
+      "project": "src/Novolis.Security.Authorization/Novolis.Security.Authorization.csproj",
+      "paths": ["src/Novolis.Security.Authorization/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.Authorization.AspNetCore": {
+      "project": "src/Novolis.Security.Authorization.AspNetCore/Novolis.Security.Authorization.AspNetCore.csproj",
+      "paths": ["src/Novolis.Security.Authorization.AspNetCore/**", "Novolis.Security.slnx"]
+    },
+    "Novolis.Security.Authorization.Storage": {
+      "project": "src/Novolis.Security.Authorization.Storage/Novolis.Security.Authorization.Storage.csproj",
+      "paths": ["src/Novolis.Security.Authorization.Storage/**", "Novolis.Security.slnx"]
     }
   }
 }

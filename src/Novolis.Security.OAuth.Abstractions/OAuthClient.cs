@@ -1,7 +1,7 @@
 namespace Novolis.Security.OAuth;
 
 /// <summary>OAuth client definition independent from any authenticated identity.</summary>
-public sealed class OAuthClient
+public sealed class OAuthClient : Novolis.Storage.Abstractions.IHasId
 {
     /// <summary>Internal persistence key.</summary>
     public Guid Id { get; set; }

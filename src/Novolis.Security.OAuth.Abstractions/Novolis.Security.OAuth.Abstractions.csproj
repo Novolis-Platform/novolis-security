@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Novolis.Security.Authentication.Abstractions\Novolis.Security.Authentication.Abstractions.csproj" />
+    <LibraryReference Include="Novolis.Storage.Abstractions" />
   </ItemGroup>
 </Project>

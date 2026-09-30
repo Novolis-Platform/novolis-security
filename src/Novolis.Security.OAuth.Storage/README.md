@@ -8,11 +8,9 @@
 
 # Novolis.Security.OAuth.Storage
 
-`IRepository<T>` adapters for identity stores. The host chooses Json / LiteDB / SQLite / in-memory via `AddStorage`.
+`IRepository<T>` adapters for OAuth clients, authorization codes, refresh tokens, and signing keys. List and identity fields are packed into SQLite-safe scalar rows.
 
-`ICredentialStore` still loads **only by `CredentialReference`**. Do not add email/username columns to `CredentialRecord` or query them here. Identifier lookup is a different system. Co-locating those fields with password hashes is a grave violation of minimum secure data-store design.
-
-Username / `client_id` scans use `IRepository.All()` — acceptable for this limited library. Custom stores may add SQL indexes later. `client_id` is an OAuth client name, not a customer email.
+Rotation and one-time code consumption are process-local atomic. Multi-instance hosts must supply a transactional store if they require distributed compare-and-swap.
 
 ## Install
 
@@ -23,12 +21,8 @@ dotnet add package Novolis.Security.OAuth.Storage
 ## Quick start
 
 ```csharp
-services.AddNovolisOAuth(o => { /* ... */ });
-services.AddStorage(b => b.AddSqliteProvider(...)); // host chooses provider
 services.AddNovolisOAuthStorage();
 ```
-
-Call `AddNovolisOAuthStorage` **after** `AddNovolisOAuth` so repository stores replace the in-memory defaults.
 
 ## Support
 

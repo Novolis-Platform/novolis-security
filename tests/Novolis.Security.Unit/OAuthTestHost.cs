@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Novolis.Security.Authentication;
 using Novolis.Security.OAuth;
 using Novolis.Security.OAuth.AspNetCore;
 using Novolis.Security.PasswordHashing;
@@ -24,11 +25,12 @@ internal sealed class OAuthTestHost : IAsyncDisposable
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.WebHost.UseTestServer();
         builder.Services.Configure<PasswordHasherOptions>(FastArgon);
+        builder.Services.AddNovolisAuthentication();
         OAuthAspNetCoreServiceCollectionExtensions.AddNovolisOAuth(builder.Services, o =>
         {
-            o.Issuer = "https://idp.test";
+            o.Issuer = new Uri("https://accounts.test");
             o.Audiences.Clear();
-            o.Audiences.Add("novolis");
+            o.Audiences.Add("space-game-api");
             o.AllowEphemeralSigningKey = true;
             configure?.Invoke(o);
         });
@@ -43,11 +45,12 @@ internal sealed class OAuthTestHost : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.Configure<PasswordHasherOptions>(FastArgon);
+        services.AddNovolisAuthentication();
         OAuthServiceCollectionExtensions.AddNovolisOAuth(services, o =>
         {
-            o.Issuer = "https://idp.test";
+            o.Issuer = new Uri("https://accounts.test");
             o.Audiences.Clear();
-            o.Audiences.Add("novolis");
+            o.Audiences.Add("space-game-api");
             o.IsDevelopment = true;
             o.AllowEphemeralSigningKey = true;
             configure?.Invoke(o);
@@ -62,41 +65,54 @@ internal sealed class OAuthTestHost : IAsyncDisposable
         o.DegreeOfParallelism = 1;
     }
 
-    public static async Task SeedClientAsync(
+    public static async Task SeedConfidentialClientAsync(
         IServiceProvider services,
-        string clientId = "app",
+        string clientId = "space-game-web",
         string secret = "client-secret",
-        bool confidential = true,
         string[]? grants = null,
-        string[]? scopes = null)
+        string[]? scopes = null,
+        string[]? redirectUris = null)
     {
-        var hasher = services.GetRequiredService<PasswordHasher>();
+        var hasher = services.GetRequiredService<ClientSecretHasher>();
         var clients = services.GetRequiredService<IClientStore>();
         await clients.UpsertAsync(new OAuthClient
         {
-            Id = Guid.CreateVersion7(),
+            Id = Guid.NewGuid(),
             ClientId = clientId,
-            SecretHash = hasher.HashPassword(secret),
-            Confidential = confidential,
-            AllowedGrantTypes = [.. grants ?? [OAuthGrantTypes.Password, OAuthGrantTypes.RefreshToken, OAuthGrantTypes.ClientCredentials]],
-            AllowedScopes = [.. scopes ?? ["openid", "api"]],
-            AllowedAudiences = ["novolis"],
+            ClientType = OAuthClientType.Confidential,
+            SecretHash = hasher.Hash(secret),
+            AllowedGrantTypes = [.. grants ?? [OAuthGrantTypes.AuthorizationCode, OAuthGrantTypes.RefreshToken, OAuthGrantTypes.ClientCredentials]],
+            AllowedScopes = [.. scopes ?? ["game", "profile"]],
+            AllowedAudiences = ["space-game-api"],
+            AllowedRedirectUris = [.. redirectUris ?? ["https://game.example/callback"]],
         });
     }
 
-    public static async Task<CredentialReference> SeedAccountAsync(IServiceProvider services, string password, bool disabled = false)
+    public static async Task SeedPublicClientAsync(
+        IServiceProvider services,
+        string clientId = "space-game-launcher")
     {
-        var hasher = services.GetRequiredService<PasswordHasher>();
-        var accounts = services.GetRequiredService<ICredentialStore>();
-        var id = CredentialReference.New();
-        await accounts.UpsertAsync(new CredentialRecord
+        var clients = services.GetRequiredService<IClientStore>();
+        await clients.UpsertAsync(new OAuthClient
         {
-            Id = id.Value,
-            PasswordHash = hasher.HashPassword(password),
-            Disabled = disabled,
-            CreatedUtc = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            ClientId = clientId,
+            ClientType = OAuthClientType.Public,
+            AllowedGrantTypes = [OAuthGrantTypes.AuthorizationCode, OAuthGrantTypes.RefreshToken],
+            AllowedScopes = ["game", "profile"],
+            AllowedAudiences = ["space-game-api"],
+            AllowedRedirectUris = ["https://launcher.example/callback"],
         });
-        return id;
+    }
+
+    public static async Task<(IdentityId IdentityId, string SessionId)> SeedIdentityAsync(
+        IServiceProvider services,
+        string identifier = "frank",
+        string password = "correct horse battery staple")
+    {
+        var authentication = services.GetRequiredService<IAuthenticationService>();
+        var result = await authentication.RegisterAsync(identifier, password);
+        return (result.IdentityId!.Value, result.SessionId!);
     }
 
     public Task<HttpResponseMessage> PostTokenAsync(Dictionary<string, string> form, string? basic = null)

@@ -12,6 +12,9 @@ Published docs: [https://novolis-platform.github.io/.github/novolis-security/](h
 - `Novolis.Security.HaveIBeenPwned`
 - `Novolis.Security.PasswordHashing`
 - `Novolis.Security.Secrets`
+- `Novolis.Security.Authentication.*`
+- `Novolis.Security.OAuth.*`
+- `Novolis.Security.Authorization.*`
 
 ## Consumers
 

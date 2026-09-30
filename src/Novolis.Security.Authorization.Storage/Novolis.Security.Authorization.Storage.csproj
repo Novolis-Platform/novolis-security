@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Authorization.Storage</PackageId>
+    <Description>IRepository adapters for tenant-scoped authorization graphs.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Authorization.Storage</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Novolis.Security.Authorization\Novolis.Security.Authorization.csproj" />
+    <LibraryReference Include="Novolis.Storage.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

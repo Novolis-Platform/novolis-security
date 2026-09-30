@@ -7,73 +7,52 @@ namespace Novolis.Security.Tests;
 public class SqliteStoreIdentityTests
 {
     [Test]
-    public async Task Sqlite_PersistsAccountAndRefresh_ScalarEntities()
+    public async Task Sqlite_PersistsPackedClients_AndAtomicRefreshRotation()
     {
-        var db = Path.Combine(Path.GetTempPath(), "novolis-idp-" + Guid.CreateVersion7().ToString("N") + ".db");
+        var db = Path.Combine(Path.GetTempPath(), "novolis-oauth-" + Guid.NewGuid().ToString("N") + ".db");
         try
         {
             var services = new ServiceCollection();
             services.AddReferenceIdentity();
             services.AddSqliteStores("Data Source=" + db + ";Pooling=False");
-            await using (var provider = services.BuildServiceProvider())
+            await using var provider = services.BuildServiceProvider();
+            await ReferenceIdentityHost.SeedClientAsync(provider);
+            var client = await provider.GetRequiredService<IClientStore>().FindByClientIdAsync("space-game-web");
+            await Assert.That(client).IsNotNull();
+            await Assert.That(client!.AllowedGrantTypes).Contains(OAuthGrantTypes.AuthorizationCode);
+
+            var store = provider.GetRequiredService<IRefreshTokenStore>();
+            var current = new RefreshTokenRecord
             {
-                var hasher = provider.GetRequiredService<Novolis.Security.PasswordHashing.PasswordHasher>();
-                var account = new CredentialRecord
-                {
-                    Id = CredentialReference.New().Value,
-                    PasswordHash = hasher.HashPassword("pw"),
-                    CreatedUtc = DateTimeOffset.UtcNow,
-                };
-                await provider.GetRequiredService<ICredentialStore>().UpsertAsync(account);
-                var loaded = await provider.GetRequiredService<ICredentialStore>().TryGetAsync(new CredentialReference(account.Id));
-                await Assert.That(loaded).IsNotNull();
-                await Assert.That(loaded!.PasswordHash).IsEqualTo(account.PasswordHash);
-
-                var refresh = new RefreshTokenRecord
-                {
-                    Id = Guid.CreateVersion7(),
-                    FamilyId = Guid.CreateVersion7(),
-                    CredentialReference = account.Id,
-                    ClientId = Guid.CreateVersion7(),
-                    SecretHash = "hash",
-                    Scope = "api",
-                    ExpiresUtc = DateTimeOffset.UtcNow.AddDays(1),
-                };
-                await provider.GetRequiredService<IRefreshTokenStore>().UpsertAsync(refresh);
-                var found = await provider.GetRequiredService<IRefreshTokenStore>().TryGetAsync(refresh.Id);
-                await Assert.That(found).IsNotNull();
-            }
-        }
-        finally
-        {
-            TryDelete(db);
-        }
-    }
-
-    [Test]
-    public async Task Sqlite_CannotMapOAuthClientListProperties()
-    {
-        var db = Path.Combine(Path.GetTempPath(), "novolis-idp-client-" + Guid.CreateVersion7().ToString("N") + ".db");
-        try
-        {
-            var services = new ServiceCollection();
-            services.AddReferenceIdentity();
-            services.AddSqliteStores("Data Source=" + db + ";Pooling=False");
-            await using (var provider = services.BuildServiceProvider())
+                Id = Guid.NewGuid(),
+                FamilyId = Guid.NewGuid(),
+                IdentityId = Novolis.Security.Authentication.IdentityId.New(),
+                ClientId = client.Id,
+                ClientPublicId = client.ClientId,
+                SecretHash = Convert.ToBase64String(new byte[64]),
+                Scope = "game",
+                Audience = "space-game-api",
+                CreatedUtc = DateTimeOffset.UtcNow,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(1),
+            };
+            await store.UpsertAsync(current);
+            var replacement = new RefreshTokenRecord
             {
-                Exception? caught = null;
-                try
-                {
-                    _ = provider.GetRequiredService<IClientStore>();
-                }
-                catch (Exception ex)
-                {
-                    caught = ex;
-                }
-
-                await Assert.That(caught).IsNotNull();
-                await Assert.That(caught!.GetBaseException() is KeyNotFoundException).IsTrue();
-            }
+                Id = Guid.NewGuid(),
+                FamilyId = current.FamilyId,
+                IdentityId = current.IdentityId,
+                ClientId = current.ClientId,
+                ClientPublicId = current.ClientPublicId,
+                SecretHash = Convert.ToBase64String(new byte[64]),
+                Scope = current.Scope,
+                Audience = current.Audience,
+                CreatedUtc = DateTimeOffset.UtcNow,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(1),
+            };
+            var rotated = await store.TryRotateAsync(current.Id, replacement, DateTimeOffset.UtcNow);
+            await Assert.That(rotated.Succeeded).IsTrue();
+            var replay = await store.TryRotateAsync(current.Id, replacement, DateTimeOffset.UtcNow);
+            await Assert.That(replay.WasReplayed).IsTrue();
         }
         finally
         {

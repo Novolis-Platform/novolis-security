@@ -1,7 +1,7 @@
 namespace Novolis.Security.OAuth;
 
 /// <summary>ECDSA P-384 signing-key record used by the OAuth key ring.</summary>
-public sealed class SigningKeyRecord
+public sealed class SigningKeyRecord : Novolis.Storage.Abstractions.IHasId
 {
     /// <summary>Internal persistence key.</summary>
     public Guid Id { get; set; }

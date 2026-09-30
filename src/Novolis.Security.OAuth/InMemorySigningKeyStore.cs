@@ -8,13 +8,31 @@ public sealed class InMemorySigningKeyStore : ISigningKeyStore
     readonly ConcurrentDictionary<string, SigningKeyRecord> _keys = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
-    public ValueTask<IReadOnlyList<SigningKeyRecord>> GetActiveAsync(CancellationToken ct = default)
+    public ValueTask<IReadOnlyList<SigningKeyRecord>> GetActiveAsync(
+        DateTimeOffset now,
+        CancellationToken ct = default)
     {
-        var now = DateTimeOffset.UtcNow;
         IReadOnlyList<SigningKeyRecord> matches = _keys.Values
-            .Where(k => k.Active && (k.NotAfterUtc is null || k.NotAfterUtc > now))
+            .Where(k => k.Enabled
+                && (k.NotBeforeUtc is null || k.NotBeforeUtc <= now)
+                && (k.NotAfterUtc is null || k.NotAfterUtc > now))
             .ToArray();
         return ValueTask.FromResult(matches);
+    }
+
+    /// <inheritdoc />
+    public ValueTask<SigningKeyRecord?> GetCurrentAsync(
+        DateTimeOffset now,
+        CancellationToken ct = default)
+    {
+        var key = _keys.Values
+            .Where(k => k.Enabled
+                && k.Current
+                && (k.NotBeforeUtc is null || k.NotBeforeUtc <= now)
+                && (k.NotAfterUtc is null || k.NotAfterUtc > now))
+            .OrderByDescending(k => k.CreatedUtc)
+            .FirstOrDefault();
+        return ValueTask.FromResult(key);
     }
 
     /// <inheritdoc />

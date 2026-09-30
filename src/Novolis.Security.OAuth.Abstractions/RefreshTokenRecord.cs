@@ -3,7 +3,7 @@ using Novolis.Security.Authentication;
 namespace Novolis.Security.OAuth;
 
 /// <summary>Opaque refresh-token record. The raw secret is never persisted.</summary>
-public sealed class RefreshTokenRecord
+public sealed class RefreshTokenRecord : Novolis.Storage.Abstractions.IHasId
 {
     /// <summary>Internal token identifier carried only in the opaque wire format.</summary>
     public Guid Id { get; set; }

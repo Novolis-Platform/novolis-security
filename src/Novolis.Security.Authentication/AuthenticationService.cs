@@ -94,6 +94,74 @@ public sealed class AuthenticationService : IAuthenticationService
     }
 
     /// <inheritdoc />
+    public async ValueTask<SignInResult> RegisterAsync(
+        string identifier,
+        string password,
+        string? displayName = null,
+        bool createSession = true,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+        ArgumentException.ThrowIfNullOrEmpty(password);
+
+        var existing = await _identities.FindByIdentifierAsync(identifier, cancellationToken)
+            .ConfigureAwait(false);
+        if (existing is not null)
+        {
+            await ObserveAsync(
+                AuthenticationEventTypes.SignInFailed,
+                existing.Id,
+                "identifier",
+                "identifier_in_use",
+                cancellationToken).ConfigureAwait(false);
+            return SignInResult.Fail("identifier_in_use");
+        }
+
+        var now = _time.GetUtcNow();
+        var reference = CredentialReference.New();
+        await _credentials.UpsertAsync(
+            new CredentialRecord
+            {
+                StorageId = Guid.NewGuid(),
+                Reference = reference,
+                PasswordHash = _hasher.HashPassword(password),
+                CreatedUtc = now,
+                UpdatedUtc = now,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var identity = new IdentityRecord
+        {
+            Id = IdentityId.New(),
+            CredentialReference = reference,
+            Username = identifier.Contains('@', StringComparison.Ordinal) ? null : identifier,
+            Email = identifier.Contains('@', StringComparison.Ordinal) ? identifier : null,
+            DisplayName = displayName,
+            CreatedUtc = now,
+        };
+        await _identities.UpsertAsync(identity, cancellationToken).ConfigureAwait(false);
+        return await SignInAsync(identifier, password, createSession, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask SignOutAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            return;
+
+        var session = await _sessions.TryGetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        await _sessions.RevokeAsync(sessionId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        await ObserveAsync(
+            AuthenticationEventTypes.SessionRevoked,
+            session?.IdentityId,
+            null,
+            null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async ValueTask<IdentityId?> GetAuthenticatedIdentityAsync(
         string sessionId,
         CancellationToken cancellationToken = default)

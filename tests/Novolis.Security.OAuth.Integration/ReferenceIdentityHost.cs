@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Novolis.Security.Authentication;
 using Novolis.Security.OAuth;
 using Novolis.Security.OAuth.Storage;
 using Novolis.Security.PasswordHashing;
@@ -10,18 +11,6 @@ using Novolis.Storage.Sqlite;
 
 namespace Novolis.Security.Tests;
 
-/// <summary>
-/// Reference wiring for a <em>library</em> identity host — not a full OAuth executable.
-/// A product OAuth would add TLS, a separate identifier directory, PEM custody, and edge IP limits.
-/// </summary>
-/// <remarks>
-/// JSON (file-per-entity) and SQLite both go through <c>AddNovolisOAuthStorage</c>.
-/// Cache: this adapter wraps <see cref="IMemoryCache"/>; a farm replaces <see cref="ICacheStore"/> with Redis INCR/SETNX.
-/// Events: default is <see cref="NoopEventStore"/>; swap <see cref="IEventStore"/> to observe grants.
-///
-/// SQLite cannot persist <see cref="OAuthClient"/> today — <c>List&lt;string&gt;</c> has no affinity in
-/// <c>Novolis.Storage.Sqlite</c>. JSON can. Do not pretend otherwise.
-/// </remarks>
 internal static class ReferenceIdentityHost
 {
     internal static void FastArgon(PasswordHasherOptions o)
@@ -36,9 +25,10 @@ internal static class ReferenceIdentityHost
         services.AddLogging();
         services.Configure<PasswordHasherOptions>(FastArgon);
         services.AddMemoryCache();
+        services.AddNovolisAuthentication();
         services.AddNovolisOAuth(o =>
         {
-            o.Issuer = "https://idp.test";
+            o.Issuer = new Uri("https://accounts.test");
             o.IsDevelopment = true;
             o.AllowEphemeralSigningKey = true;
             configure?.Invoke(o);
@@ -66,31 +56,23 @@ internal static class ReferenceIdentityHost
         return services;
     }
 
-    internal static async Task SeedAsync(IServiceProvider services, string password = "pw")
+    internal static async Task SeedClientAsync(IServiceProvider services)
     {
-        var hasher = services.GetRequiredService<PasswordHasher>();
+        var hasher = services.GetRequiredService<ClientSecretHasher>();
         await services.GetRequiredService<IClientStore>().UpsertAsync(new OAuthClient
         {
-            Id = Guid.CreateVersion7(),
-            ClientId = "app",
-            SecretHash = hasher.HashPassword("client-secret"),
-            Confidential = true,
-            AllowedGrantTypes = [OAuthGrantTypes.Password, OAuthGrantTypes.RefreshToken, OAuthGrantTypes.ClientCredentials],
-            AllowedScopes = ["api"],
-            AllowedAudiences = ["novolis"],
-        });
-        await services.GetRequiredService<ICredentialStore>().UpsertAsync(new CredentialRecord
-        {
-            Id = CredentialReference.New().Value,
-            PasswordHash = hasher.HashPassword(password),
-            CreatedUtc = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            ClientId = "space-game-web",
+            ClientType = OAuthClientType.Confidential,
+            SecretHash = hasher.Hash("client-secret"),
+            AllowedGrantTypes = [OAuthGrantTypes.AuthorizationCode, OAuthGrantTypes.RefreshToken, OAuthGrantTypes.ClientCredentials],
+            AllowedScopes = ["game"],
+            AllowedAudiences = ["space-game-api"],
+            AllowedRedirectUris = ["https://game.example/callback"],
         });
     }
 }
 
-/// <summary>
-/// Single-node <see cref="IMemoryCache"/> adapter. Not a farm lock — increments and leases take a process lock.
-/// </summary>
 internal sealed class MemoryCacheStore(IMemoryCache cache) : ICacheStore
 {
     readonly object _gate = new();

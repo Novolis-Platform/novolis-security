@@ -8,9 +8,13 @@
 
 # Novolis.Security.OAuth.AspNetCore
 
-Maps identity / authentication endpoints onto ASP.NET Core: `POST /oauth/token`, `POST /oauth/revoke`, JWKS, and a minimal OpenID discovery document. This is not a full OAuth host — TLS, HSTS, and edge rate limits stay in the executable.
+Maps the OAuth protocol surface:
 
-The password grant's RFC 6749 `username` field is the **opaque `CredentialReference` GUID**, not an email. Resolving email/username happens in another system. Putting identifiers next to password hashes is a grave store-design violation — see `Novolis.Security.OAuth.Abstractions`.
+- `GET /oauth/authorize`
+- `POST /oauth/token`
+- `POST /oauth/revoke`
+- `GET /.well-known/oauth-authorization-server`
+- `GET /.well-known/jwks.json`
 
 ## Install
 
@@ -23,18 +27,17 @@ dotnet add package Novolis.Security.OAuth.AspNetCore
 ```csharp
 builder.Services.AddNovolisOAuth(o =>
 {
-    o.Issuer = "https://idp.example";
-    o.IsDevelopment = builder.Environment.IsDevelopment();
-    o.AllowEphemeralSigningKey = builder.Environment.IsDevelopment();
+    o.Issuer = new Uri("https://accounts.example.com");
 });
-builder.Services.AddAuthentication().AddNovolisJwtBearer();
+builder.Services.AddAuthentication().AddNovolisBearer(
+    issuer: new Uri("https://accounts.example.com"),
+    audience: "space-game-api");
 
 var app = builder.Build();
-app.UseAuthentication();
 app.MapNovolisOAuth();
 ```
 
-HTTPS and edge IP rate limits are host concerns. Token-attempt limits are enforced in `ICacheStore`, not ASP.NET `RateLimiter`.
+This is not an OpenID Provider. An `openid-configuration` alias is opt-in and still advertises OAuth-only metadata.
 
 ## Support
 

@@ -1,3 +1,5 @@
+using Novolis.Security.Authentication;
+
 namespace Novolis.Security.OAuth;
 
 /// <summary>Token endpoint result. Failed results use RFC 6749 <see cref="Error"/> codes and never distinguish unknown users.</summary>
@@ -27,6 +29,9 @@ public sealed class TokenIssueResult
     /// <summary>Granted scope string.</summary>
     public string? Scope { get; init; }
 
+    /// <summary>Authenticated global identity when the grant represents a person.</summary>
+    public IdentityId? IdentityId { get; init; }
+
     /// <summary>Creates a failed result.</summary>
     public static TokenIssueResult Fail(string error, string? description = null) =>
         new()
@@ -37,7 +42,12 @@ public sealed class TokenIssueResult
         };
 
     /// <summary>Creates a successful token response.</summary>
-    public static TokenIssueResult Ok(string accessToken, int expiresIn, string? refreshToken, string scope) =>
+    public static TokenIssueResult Ok(
+        string accessToken,
+        int expiresIn,
+        string? refreshToken,
+        string scope,
+        IdentityId? identityId = null) =>
         new()
         {
             Succeeded = true,
@@ -46,5 +56,6 @@ public sealed class TokenIssueResult
             ExpiresIn = expiresIn,
             RefreshToken = refreshToken,
             Scope = scope,
+            IdentityId = identityId,
         };
 }

@@ -17,4 +17,17 @@ public interface IAuthenticationService
     ValueTask<IdentityId?> GetAuthenticatedIdentityAsync(
         string sessionId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Creates an identity and isolated credential material for a new account.</summary>
+    ValueTask<SignInResult> RegisterAsync(
+        string identifier,
+        string password,
+        string? displayName = null,
+        bool createSession = true,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Revokes a browser authentication session.</summary>
+    ValueTask SignOutAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default);
 }

@@ -14,8 +14,12 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Novolis.Security.PasswordHashing\Novolis.Security.PasswordHashing.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Authentication\Novolis.Security.Authentication.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Authentication.Storage\Novolis.Security.Authentication.Storage.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.OAuth.Abstractions\Novolis.Security.OAuth.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.OAuth\Novolis.Security.OAuth.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.OAuth.Storage\Novolis.Security.OAuth.Storage.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Authorization\Novolis.Security.Authorization.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Authorization.Storage\Novolis.Security.Authorization.Storage.csproj" />
   </ItemGroup>
 </Project>

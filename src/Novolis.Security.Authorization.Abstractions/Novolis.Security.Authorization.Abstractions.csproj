@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Authorization.Abstractions</PackageId>
+    <Description>Tenant-scoped authorization contracts: groups, roles, permissions, and decisions.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Authorization</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Novolis.Security.Authentication.Abstractions\Novolis.Security.Authentication.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

@@ -5,24 +5,30 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Novolis.Security.OAuth;
 
-/// <summary>Loads ECDSA P-384 signing material from PEM, the key store, or an ephemeral Development key.</summary>
+/// <summary>ES384 key ring with one current signer and historical validation keys.</summary>
 public sealed class SigningKeyRing
 {
     internal const string DevelopmentPemForbidden = "Ephemeral or Development signing keys are forbidden outside Development.";
 
     readonly OAuthOptions _options;
-    readonly ISigningKeyStore _store;
+    readonly IKeyStore _store;
     readonly ILogger<SigningKeyRing> _logger;
+    readonly TimeProvider _time;
     readonly Lock _gate = new();
     ECDsaSecurityKey? _signing;
-    IReadOnlyList<ECDsaSecurityKey> _validation = [];
+    IReadOnlyList<SecurityKey> _validation = [];
 
     /// <summary>Creates a key ring.</summary>
-    public SigningKeyRing(IOptions<OAuthOptions> options, ISigningKeyStore store, ILogger<SigningKeyRing> logger)
+    public SigningKeyRing(
+        IOptions<OAuthOptions> options,
+        IKeyStore store,
+        ILogger<SigningKeyRing> logger,
+        TimeProvider time)
     {
         _options = options.Value;
         _store = store;
         _logger = logger;
+        _time = time;
     }
 
     /// <summary>Credentials for minting ES384 access tokens.</summary>
@@ -32,20 +38,29 @@ public sealed class SigningKeyRing
         return new SigningCredentials(_signing!, SecurityAlgorithms.EcdsaSha384);
     }
 
-    /// <summary>Public keys for JWT validation and JWKS.</summary>
-    public IReadOnlyList<ECDsaSecurityKey> GetValidationKeys()
+    /// <summary>Public and historical keys for JWT validation.</summary>
+    public IReadOnlyList<SecurityKey> GetValidationKeys()
     {
         EnsureLoaded();
         return _validation;
     }
 
-    /// <summary>Public JWKS document (no private parameters).</summary>
+    /// <summary>Public JWKS document with no private key material.</summary>
     public JsonWebKeySet GetJsonWebKeySet()
     {
+        EnsureLoaded();
         var set = new JsonWebKeySet();
-        foreach (var key in GetValidationKeys())
+        foreach (var key in _validation)
         {
-            var jwk = JsonWebKeyConverter.ConvertFromECDsaSecurityKey(ToPublic(key));
+            var jwk = key switch
+            {
+                JsonWebKey jsonWebKey => new JsonWebKey(jsonWebKey.ToString()),
+                ECDsaSecurityKey ecdsa => JsonWebKeyConverter.ConvertFromECDsaSecurityKey(ToPublic(ecdsa)),
+                _ => null,
+            };
+            if (jwk is null)
+                continue;
+
             jwk.Use = "sig";
             jwk.Alg = SecurityAlgorithms.EcdsaSha384;
             jwk.D = null;
@@ -65,48 +80,82 @@ public sealed class SigningKeyRing
             if (_signing is not null)
                 return;
 
+            var now = _time.GetUtcNow();
+            var stored = _store.GetActiveAsync(now).AsTask().GetAwaiter().GetResult()
+                .Where(k => string.Equals(k.Alg, SecurityAlgorithms.EcdsaSha384, StringComparison.Ordinal))
+                .ToArray();
+            var validation = new List<SecurityKey>();
+
+            foreach (var record in stored)
+            {
+                var key = LoadValidationKey(record);
+                if (key is not null)
+                    validation.Add(key);
+            }
+
             if (!string.IsNullOrWhiteSpace(_options.SigningKeyPem))
             {
-                LoadFromPem(_options.SigningKeyPem, _options.SigningKeyKid);
-                return;
+                _signing = LoadPrivateKey(_options.SigningKeyPem, _options.SigningKeyKid);
+                validation.Insert(0, ToPublic(_signing));
             }
-
-            var stored = _store.GetActiveAsync().AsTask().GetAwaiter().GetResult();
-            var withPrivate = stored.FirstOrDefault(k => !string.IsNullOrWhiteSpace(k.PrivatePem));
-            if (withPrivate is not null)
+            else
             {
-                LoadFromPem(withPrivate.PrivatePem!, withPrivate.Kid);
-                return;
+                var current = _store.GetCurrentAsync(now).AsTask().GetAwaiter().GetResult()
+                    ?? stored.FirstOrDefault(k => k.Current && !string.IsNullOrWhiteSpace(k.PrivatePem))
+                    ?? stored.Where(k => !string.IsNullOrWhiteSpace(k.PrivatePem))
+                        .OrderByDescending(k => k.CreatedUtc)
+                        .FirstOrDefault();
+
+                if (current is not null && !string.IsNullOrWhiteSpace(current.PrivatePem))
+                {
+                    _signing = LoadPrivateKey(current.PrivatePem!, current.Kid);
+                }
+                else if (_options.IsDevelopment && _options.AllowEphemeralSigningKey)
+                {
+                    _logger.LogWarning("Generating an ephemeral ECDSA P-384 signing key. Tokens will not survive process restart.");
+                    var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+                    _signing = new ECDsaSecurityKey(ecdsa) { KeyId = StableKid(ecdsa) };
+                    validation.Insert(0, ToPublic(_signing));
+                }
+                else
+                {
+                    if (!_options.IsDevelopment && _options.AllowEphemeralSigningKey)
+                        throw new InvalidOperationException(DevelopmentPemForbidden);
+
+                    throw new InvalidOperationException(
+                        "OAuthOptions.SigningKeyPem or a signing-key store private key is required outside Development.");
+                }
             }
 
-            if (_options.IsDevelopment && _options.AllowEphemeralSigningKey)
-            {
-                _logger.LogWarning("Generating an ephemeral ECDSA P-384 signing key. Tokens will not survive process restart.");
-                var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
-                var kid = Guid.CreateVersion7().ToString("N");
-                _signing = new ECDsaSecurityKey(ecdsa) { KeyId = kid };
-                _validation = [_signing];
-                return;
-            }
+            if (_signing is not null && validation.All(k => !string.Equals(k.KeyId, _signing.KeyId, StringComparison.Ordinal)))
+                validation.Insert(0, ToPublic(_signing));
 
-            if (!_options.IsDevelopment && _options.AllowEphemeralSigningKey)
-                throw new InvalidOperationException(DevelopmentPemForbidden);
-
-            throw new InvalidOperationException(
-                "OAuthOptions.SigningKeyPem or a signing-key store private PEM is required outside Development.");
+            _validation = validation
+                .GroupBy(k => k.KeyId ?? "", StringComparer.Ordinal)
+                .Select(g => g.First())
+                .ToArray();
         }
     }
 
-    void LoadFromPem(string pem, string? kid)
+    static ECDsaSecurityKey LoadPrivateKey(string pem, string? kid)
     {
         var ecdsa = ECDsa.Create();
         ecdsa.ImportFromPem(pem);
         if (ecdsa.KeySize != 384)
             throw new InvalidOperationException("Signing keys must be ECDSA P-384 (ES384).");
 
-        kid ??= Guid.CreateVersion7().ToString("N");
-        _signing = new ECDsaSecurityKey(ecdsa) { KeyId = kid };
-        _validation = [_signing];
+        return new ECDsaSecurityKey(ecdsa) { KeyId = string.IsNullOrWhiteSpace(kid) ? StableKid(ecdsa) : kid };
+    }
+
+    static SecurityKey? LoadValidationKey(SigningKeyRecord record)
+    {
+        if (!string.IsNullOrWhiteSpace(record.PrivatePem))
+            return ToPublic(LoadPrivateKey(record.PrivatePem!, record.Kid));
+        if (string.IsNullOrWhiteSpace(record.PublicJwk))
+            return null;
+
+        var jwk = new JsonWebKey(record.PublicJwk) { KeyId = record.Kid };
+        return jwk;
     }
 
     static ECDsaSecurityKey ToPublic(ECDsaSecurityKey key)
@@ -114,5 +163,14 @@ public sealed class SigningKeyRing
         var parameters = key.ECDsa.ExportParameters(includePrivateParameters: false);
         var pub = ECDsa.Create(parameters);
         return new ECDsaSecurityKey(pub) { KeyId = key.KeyId };
+    }
+
+    static string StableKid(ECDsa ecdsa)
+    {
+        var parameters = ecdsa.ExportParameters(includePrivateParameters: false);
+        var material = new byte[parameters.Q.X!.Length + parameters.Q.Y!.Length];
+        parameters.Q.X.CopyTo(material, 0);
+        parameters.Q.Y.CopyTo(material, parameters.Q.X.Length);
+        return Base64UrlEncoder.Encode(SHA256.HashData(material))[..22];
     }
 }

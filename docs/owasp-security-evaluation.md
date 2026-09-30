@@ -28,13 +28,13 @@ Scores below are against the code as it is. Fixed items were moved; remaining ga
 
 **Out of scope (by design)**
 
-- Authorization-code + PKCE, OIDC hybrid/implicit, federation, userinfo, consent UI
+- OIDC hybrid/implicit, federation, userinfo, consent UI
 - IdentityServer / Duende / OpenIddict feature parity
-- Email/username directory (forbidden on `CredentialRecord`; see [design.md](design.md))
+- Email/username columns on credential records (forbidden; see [design.md](design.md))
 - Host TLS, HSTS, WAF, SIEM, HSM
 - A full OAuth product (installer, edge, directory, operator UX)
 
-The library is a **first-party token mint** for confidential clients. The resource-owner password grant takes an already-resolved `CredentialReference` GUID, not a login name.
+The library is a first-party OAuth authorization server plus a separate tenant-scoped authorization engine. The password grant is not supported. Interactive clients use Authorization Code + PKCE.
 
 ## 2. Methodology
 
@@ -60,7 +60,7 @@ Severity for findings: **Critical / High / Medium / Low / Info**.
 
 Cryptography and JWT validation are in good shape: Argon2id (OWASP 2024 first recommendation), AES-256-GCM, ES384-only validation, public JWKS, rotating hashed refresh secrets, dummy Argon2 verify to blunt user enumeration, Unicode NFC on hash/verify, and a red-team suite that exercises alg=none, HMAC confusion, RS256/ES256, `jku` injection, refresh reuse, and scope elevation.
 
-The largest *inherent* risk is still the **resource-owner password credentials (ROPC)** grant. RFC 9700 discourages it. Confidential clients, opaque `CredentialReference`, NFC, dummy verify, and per-account failure counters reduce abuse; they do not make ROPC a good public login. That stays a finding, not a Pass.
+The resource-owner password credentials grant has been removed. Interactive authentication uses Authorization Code + mandatory S256 PKCE. Residual risk is now operational: refresh-token atomicity across processes, bearer access tokens, and host TLS/IP limits.
 
 The largest *operational* risks that remain:
 

@@ -1,11 +1,10 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using Microsoft.IdentityModel.Tokens;
 
 namespace Novolis.Security.Authentication;
 
 /// <summary>Process-local browser authentication-session store.</summary>
-public sealed class InMemoryAuthenticationSessionStore(TimeProvider time) : IAuthenticationSessionStore
+public sealed class InMemoryAuthenticationSessionStore : IAuthenticationSessionStore
 {
     readonly ConcurrentDictionary<string, AuthenticationSession> _sessions = new(StringComparer.Ordinal);
 
@@ -26,7 +25,7 @@ public sealed class InMemoryAuthenticationSessionStore(TimeProvider time) : IAut
         CancellationToken cancellationToken = default)
     {
         var buffer = RandomNumberGenerator.GetBytes(32);
-        var sessionId = Base64UrlEncoder.Encode(buffer);
+        var sessionId = Convert.ToBase64String(buffer).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         CryptographicOperations.ZeroMemory(buffer);
 
         var session = new AuthenticationSession

@@ -8,4 +8,7 @@ public sealed class AuthenticationOptions
 
     /// <summary>Whether a sign-in creates a browser session by default.</summary>
     public bool CreateSessionByDefault { get; set; } = true;
+
+    /// <summary>OAuth issuer composed by the high-level ASP.NET façade.</summary>
+    public Uri? Issuer { get; set; }
 }

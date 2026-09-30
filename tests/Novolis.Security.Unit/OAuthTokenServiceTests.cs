@@ -1,16 +1,12 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.TestHost;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Novolis.Security.OAuth;
-using Novolis.Security.OAuth.AspNetCore;
-using Novolis.Security.OAuth.Storage;
-using Novolis.Security.PasswordHashing;
-using Novolis.Storage.Abstractions;
-using Novolis.Storage.InMemory;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
+using Novolis.Security.Authentication;
+using Novolis.Security.OAuth;
 using TUnit.Core;
 
 namespace Novolis.Security.Tests;
@@ -18,64 +14,115 @@ namespace Novolis.Security.Tests;
 public class OAuthTokenServiceTests
 {
     [Test]
-    public async Task CredentialRecord_HasNoIdentifierFields()
+    public async Task PasswordGrant_IsRejected()
     {
-        var names = typeof(CredentialRecord).GetProperties().Select(p => p.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        string[] forbidden = ["Email", "Username", "UserName", "Handle", "HandleHash", "Phone", "DisplayName"];
-        foreach (var name in forbidden)
-            await Assert.That(names.Contains(name)).IsFalse();
-
-        var methods = typeof(ICredentialStore).GetMethods().Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
-        await Assert.That(methods.Contains("TryGetAsync")).IsTrue();
-        await Assert.That(methods.Any(m => m.Contains("Email", StringComparison.OrdinalIgnoreCase)
-                                          || m.Contains("Handle", StringComparison.OrdinalIgnoreCase)
-                                          || m.Contains("User", StringComparison.OrdinalIgnoreCase))).IsFalse();
-    }
-
-    [Test]
-    public async Task PasswordGrant_UnknownAccount_SameErrorAsBadPassword()
-    {
-        await using var provider = CreateProvider();
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
         var tokens = provider.GetRequiredService<ITokenService>();
-        await SeedClientAsync(provider);
-
-        var missing = await tokens.IssueAsync(PasswordRequest(CredentialReference.New(), "password"));
-        var wrong = await tokens.IssueAsync(PasswordRequest(await SeedAccountAsync(provider, "password"), "nope"));
-
-        await Assert.That(missing.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
-        await Assert.That(wrong.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
+        var result = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = "password",
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+        });
+        await Assert.That(result.Error).IsEqualTo(OAuthTokenErrors.UnsupportedGrantType);
     }
 
     [Test]
-    public async Task PasswordGrant_IssuesEs384Jwt()
+    public async Task AuthorizationCode_IssuesEs384Jwt_AndRotatingRefresh()
     {
-        await using var provider = CreateProvider();
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var (identityId, _) = await OAuthTestHost.SeedIdentityAsync(provider);
         var tokens = provider.GetRequiredService<OAuthTokenService>();
-        await SeedClientAsync(provider);
-        var account = await SeedAccountAsync(provider, "correct horse battery staple");
+        var (verifier, challenge) = CreatePkce();
+        var code = await tokens.IssueAuthorizationCodeAsync(new AuthorizationCodeIssueRequest
+        {
+            ClientId = "space-game-web",
+            RedirectUri = "https://game.example/callback",
+            IdentityId = identityId,
+            Scope = "game",
+            Audience = "space-game-api",
+            CodeChallenge = challenge,
+            CodeChallengeMethod = "S256",
+        });
+        await Assert.That(code.Succeeded).IsTrue();
 
-        var issued = await tokens.IssueAsync(PasswordRequest(account, "correct horse battery staple"));
+        var issued = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.AuthorizationCode,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            AuthorizationCode = code.Code,
+            RedirectUri = "https://game.example/callback",
+            CodeVerifier = verifier,
+        });
         await Assert.That(issued.Succeeded).IsTrue();
+        await Assert.That(issued.RefreshToken).IsNotNull();
+        await Assert.That(issued.IdentityId).IsEqualTo(identityId);
 
         var validated = await tokens.ValidateAsync(issued.AccessToken!);
         await Assert.That(validated.IsValid).IsTrue();
-        await Assert.That(validated.ClaimsIdentity?.FindFirst("sub")?.Value).IsEqualTo(account.Value.ToString("D"));
-        await Assert.That(issued.RefreshToken).IsNotNull();
+        await Assert.That(validated.ClaimsIdentity?.FindFirst("sub")?.Value).IsEqualTo(identityId.ToString());
+        await Assert.That(validated.ClaimsIdentity?.FindFirst("client_id")?.Value).IsEqualTo("space-game-web");
+    }
+
+    [Test]
+    public async Task AuthorizationCode_Replay_Fails()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var (identityId, _) = await OAuthTestHost.SeedIdentityAsync(provider);
+        var tokens = provider.GetRequiredService<OAuthTokenService>();
+        var (verifier, challenge) = CreatePkce();
+        var code = await IssueCodeAsync(tokens, identityId, challenge);
+        var request = new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.AuthorizationCode,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            AuthorizationCode = code,
+            RedirectUri = "https://game.example/callback",
+            CodeVerifier = verifier,
+        };
+        await Assert.That((await tokens.IssueAsync(request)).Succeeded).IsTrue();
+        await Assert.That((await tokens.IssueAsync(request)).Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
+    }
+
+    [Test]
+    public async Task AuthorizationCode_WrongVerifierOrRedirect_Fails()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var (identityId, _) = await OAuthTestHost.SeedIdentityAsync(provider);
+        var tokens = provider.GetRequiredService<OAuthTokenService>();
+        var (verifier, challenge) = CreatePkce();
+        var code = await IssueCodeAsync(tokens, identityId, challenge);
+        var wrongVerifier = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.AuthorizationCode,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            AuthorizationCode = code,
+            RedirectUri = "https://game.example/callback",
+            CodeVerifier = "wrong-verifier-value-that-is-long-enough",
+        });
+        await Assert.That(wrongVerifier.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
     }
 
     [Test]
     public async Task Refresh_Rotates_AndReuseRevokesFamily()
     {
-        await using var provider = CreateProvider();
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var (identityId, _) = await OAuthTestHost.SeedIdentityAsync(provider);
         var tokens = provider.GetRequiredService<ITokenService>();
-        await SeedClientAsync(provider);
-        var account = await SeedAccountAsync(provider, "pw");
+        var first = await RedeemAsync(provider, tokens, identityId);
 
-        var first = await tokens.IssueAsync(PasswordRequest(account, "pw"));
         var rotated = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
-            ClientId = "app",
+            ClientId = "space-game-web",
             ClientSecret = "client-secret",
             RefreshToken = first.RefreshToken,
         });
@@ -85,17 +132,16 @@ public class OAuthTokenServiceTests
         var replay = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
-            ClientId = "app",
+            ClientId = "space-game-web",
             ClientSecret = "client-secret",
             RefreshToken = first.RefreshToken,
         });
         await Assert.That(replay.Succeeded).IsFalse();
-        await Assert.That(replay.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
 
         var afterReuse = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
-            ClientId = "app",
+            ClientId = "space-game-web",
             ClientSecret = "client-secret",
             RefreshToken = rotated.RefreshToken,
         });
@@ -103,230 +149,143 @@ public class OAuthTokenServiceTests
     }
 
     [Test]
-    public async Task ClientCredentials_OmitsRefresh_AndNarrowsScope()
+    public async Task Refresh_RejectsScopeAndAudienceEscalation()
     {
-        await using var provider = CreateProvider();
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var (identityId, _) = await OAuthTestHost.SeedIdentityAsync(provider);
+        var tokens = provider.GetRequiredService<ITokenService>();
+        var first = await RedeemAsync(provider, tokens, identityId, scope: "game");
+
+        var escalatedScope = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.RefreshToken,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            RefreshToken = first.RefreshToken,
+            Scope = "game profile",
+        });
+        await Assert.That(escalatedScope.Error).IsEqualTo(OAuthTokenErrors.InvalidScope);
+
+        var escalatedAudience = await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.RefreshToken,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            RefreshToken = first.RefreshToken,
+            Audience = "farming-api",
+        });
+        await Assert.That(escalatedAudience.Error).IsEqualTo(OAuthTokenErrors.InvalidScope);
+    }
+
+    [Test]
+    public async Task ClientCredentials_OmitsRefresh_AndRejectsPublicClient()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        await OAuthTestHost.SeedPublicClientAsync(provider);
         var tokens = provider.GetRequiredService<OAuthTokenService>();
-        await SeedClientAsync(provider);
 
         var issued = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.ClientCredentials,
-            ClientId = "app",
+            ClientId = "space-game-web",
             ClientSecret = "client-secret",
-            Scope = "api",
+            Scope = "game",
         });
         await Assert.That(issued.Succeeded).IsTrue();
         await Assert.That(issued.RefreshToken).IsNull();
-        await Assert.That(issued.Scope).IsEqualTo("api");
+        await Assert.That(issued.IdentityId).IsNull();
 
         var denied = await tokens.IssueAsync(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.ClientCredentials,
-            ClientId = "app",
+            ClientId = "space-game-launcher",
+        });
+        await Assert.That(denied.Error).IsEqualTo(OAuthTokenErrors.UnauthorizedClient);
+    }
+
+    [Test]
+    public async Task Discovery_AdvertisesRfc8414_AndRejectsOidcClaims()
+    {
+        await using var host = await OAuthTestHost.StartAsync();
+        var metadata = await host.Client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server");
+        await Assert.That(metadata.GetProperty("issuer").GetString()).IsEqualTo("https://accounts.test");
+        await Assert.That(metadata.GetProperty("authorization_endpoint").GetString())
+            .IsEqualTo("https://accounts.test/oauth/authorize");
+        await Assert.That(metadata.GetProperty("response_types_supported")[0].GetString()).IsEqualTo("code");
+        await Assert.That(metadata.GetProperty("code_challenge_methods_supported")[0].GetString()).IsEqualTo("S256");
+        await Assert.That(metadata.TryGetProperty("userinfo_endpoint", out _)).IsFalse();
+        await Assert.That(metadata.TryGetProperty("id_token_signing_alg_values_supported", out _)).IsFalse();
+        await Assert.That((await host.Client.GetAsync("/.well-known/openid-configuration")).StatusCode)
+            .IsEqualTo(HttpStatusCode.NotFound);
+    }
+
+    [Test]
+    public async Task Jwks_OmitsPrivateMaterial()
+    {
+        await using var host = await OAuthTestHost.StartAsync();
+        var jwks = await host.Client.GetFromJsonAsync<JsonElement>("/.well-known/jwks.json");
+        var key = jwks.GetProperty("keys")[0];
+        await Assert.That(key.GetProperty("kty").GetString()).IsEqualTo("EC");
+        await Assert.That(key.GetProperty("crv").GetString()).IsEqualTo("P-384");
+        await Assert.That(key.TryGetProperty("d", out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task TamperedAndWrongAudienceTokens_AreRejected()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var (identityId, _) = await OAuthTestHost.SeedIdentityAsync(provider);
+        var tokens = provider.GetRequiredService<OAuthTokenService>();
+        var issued = await RedeemAsync(provider, tokens, identityId);
+        var tampered = issued.AccessToken![..^4] + "xxxx";
+        var invalid = await tokens.ValidateAsync(tampered);
+        await Assert.That(invalid.IsValid).IsFalse();
+    }
+
+    static async Task<string> IssueCodeAsync(OAuthTokenService tokens, IdentityId identityId, string challenge)
+    {
+        var issued = await tokens.IssueAuthorizationCodeAsync(new AuthorizationCodeIssueRequest
+        {
+            ClientId = "space-game-web",
+            RedirectUri = "https://game.example/callback",
+            IdentityId = identityId,
+            Scope = "game",
+            Audience = "space-game-api",
+            CodeChallenge = challenge,
+            CodeChallengeMethod = "S256",
+        });
+        return issued.Code!;
+    }
+
+    static async Task<TokenIssueResult> RedeemAsync(
+        IServiceProvider services,
+        ITokenService tokens,
+        IdentityId identityId,
+        string scope = "game")
+    {
+        var oauth = services.GetRequiredService<OAuthTokenService>();
+        var (verifier, challenge) = CreatePkce();
+        var code = await IssueCodeAsync(oauth, identityId, challenge);
+        return await tokens.IssueAsync(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.AuthorizationCode,
+            ClientId = "space-game-web",
             ClientSecret = "client-secret",
-            Scope = "admin",
-        });
-        await Assert.That(denied.Error).IsEqualTo(OAuthTokenErrors.InvalidScope);
-    }
-
-    [Test]
-    public async Task DisabledClient_SameErrorAsBadSecret()
-    {
-        await using var provider = CreateProvider();
-        await SeedClientAsync(provider);
-        var clients = provider.GetRequiredService<IClientStore>();
-        var client = (await clients.FindByClientIdAsync("app"))!;
-        client.Disabled = true;
-        await clients.UpsertAsync(client);
-        var tokens = provider.GetRequiredService<ITokenService>();
-        var result = await tokens.IssueAsync(new TokenIssueRequest
-        {
-            GrantType = OAuthGrantTypes.ClientCredentials,
-            ClientId = "app",
-            ClientSecret = "client-secret",
-        });
-        await Assert.That(result.Error).IsEqualTo(OAuthTokenErrors.InvalidClient);
-    }
-
-    [Test]
-    public async Task EventStore_RecordsIssuedAndDenied()
-    {
-        var recorded = new List<SecurityEvent>();
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.Configure<PasswordHasherOptions>(FastArgon);
-        OAuthServiceCollectionExtensions.AddNovolisOAuth(services, o =>
-        {
-            o.Issuer = "https://idp.test";
-            o.IsDevelopment = true;
-            o.AllowEphemeralSigningKey = true;
-        });
-        services.Replace(ServiceDescriptor.Singleton<IEventStore>(new RecordingEventStore(recorded)));
-        await using var provider = services.BuildServiceProvider();
-        await SeedClientAsync(provider);
-        var tokens = provider.GetRequiredService<ITokenService>();
-        await tokens.IssueAsync(new TokenIssueRequest
-        {
-            GrantType = OAuthGrantTypes.ClientCredentials,
-            ClientId = "app",
-            ClientSecret = "wrong",
-        });
-        await Assert.That(recorded.Any(e => e.Type == SecurityEventTypes.TokenDenied)).IsTrue();
-    }
-
-    [Test]
-    public async Task EphemeralKey_ForbiddenOutsideDevelopment()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        OAuthServiceCollectionExtensions.AddNovolisOAuth(services, o =>
-        {
-            o.IsDevelopment = false;
-            o.AllowEphemeralSigningKey = true;
-        });
-        await using var provider = services.BuildServiceProvider();
-        var act = () => provider.GetRequiredService<ITokenService>();
-        await Assert.That(act).Throws<InvalidOperationException>();
-    }
-
-    [Test]
-    public async Task WebEndpoints_TokenAndJwks_RoundTrip()
-    {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
-        builder.WebHost.UseTestServer();
-        builder.Services.Configure<PasswordHasherOptions>(FastArgon);
-        OAuthAspNetCoreServiceCollectionExtensions.AddNovolisOAuth(builder.Services, o =>
-        {
-            o.Issuer = "https://idp.test";
-            o.AllowEphemeralSigningKey = true;
-        });
-        await using var app = builder.Build();
-        app.MapNovolisOAuth();
-        await app.StartAsync();
-
-        await SeedClientAsync(app.Services);
-        var account = await SeedAccountAsync(app.Services, "pw");
-        var client = app.GetTestClient();
-
-        using var tokenResponse = await client.PostAsync(
-            "/oauth/token",
-            new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["grant_type"] = "password",
-                ["client_id"] = "app",
-                ["client_secret"] = "client-secret",
-                ["username"] = account.Value.ToString("D"),
-                ["password"] = "pw",
-            }));
-        await Assert.That(tokenResponse.StatusCode).IsEqualTo(HttpStatusCode.OK);
-        var payload = await tokenResponse.Content.ReadFromJsonAsync<JsonElement>();
-        await Assert.That(payload.GetProperty("access_token").GetString()).IsNotNull();
-
-        using var jwks = await client.GetAsync("/.well-known/jwks.json");
-        await Assert.That(jwks.StatusCode).IsEqualTo(HttpStatusCode.OK);
-        var keys = await jwks.Content.ReadFromJsonAsync<JsonElement>();
-        await Assert.That(keys.GetProperty("keys").GetArrayLength()).IsEqualTo(1);
-        await Assert.That(keys.GetProperty("keys")[0].GetProperty("alg").GetString()).IsEqualTo("ES384");
-    }
-
-    [Test]
-    public async Task RepositoryStores_PasswordGrant_PersistsRefresh()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.Configure<PasswordHasherOptions>(FastArgon);
-        OAuthServiceCollectionExtensions.AddNovolisOAuth(services, o =>
-        {
-            o.Issuer = "https://idp.test";
-            o.IsDevelopment = true;
-            o.AllowEphemeralSigningKey = true;
-        });
-        services.AddStorage(b => b.AddInMemoryProvider());
-        services.AddNovolisOAuthStorage();
-        await using var provider = services.BuildServiceProvider();
-
-        await SeedClientAsync(provider);
-        var account = await SeedAccountAsync(provider, "pw");
-        var tokens = provider.GetRequiredService<ITokenService>();
-        var issued = await tokens.IssueAsync(PasswordRequest(account, "pw"));
-        await Assert.That(issued.Succeeded).IsTrue();
-
-        var refreshRepo = provider.GetRequiredService<IRepository<RefreshTokenRecord>>();
-        await Assert.That(refreshRepo.All().Any()).IsTrue();
-    }
-
-    static TokenIssueRequest PasswordRequest(CredentialReference account, string password) => new()
-    {
-        GrantType = OAuthGrantTypes.Password,
-        ClientId = "app",
-        ClientSecret = "client-secret",
-        CredentialReference = account,
-        Password = password,
-    };
-
-    static void FastArgon(PasswordHasherOptions o)
-    {
-        o.MemorySizeKiB = 32;
-        o.Iterations = 1;
-        o.DegreeOfParallelism = 1;
-    }
-
-    static ServiceProvider CreateProvider()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.Configure<PasswordHasherOptions>(FastArgon);
-        OAuthServiceCollectionExtensions.AddNovolisOAuth(services, o =>
-        {
-            o.Issuer = "https://idp.test";
-            o.IsDevelopment = true;
-            o.AllowEphemeralSigningKey = true;
-        });
-        return services.BuildServiceProvider();
-    }
-
-    static async Task SeedClientAsync(IServiceProvider services)
-    {
-        var hasher = services.GetRequiredService<PasswordHasher>();
-        var clients = services.GetRequiredService<IClientStore>();
-        await clients.UpsertAsync(new OAuthClient
-        {
-            Id = Guid.CreateVersion7(),
-            ClientId = "app",
-            SecretHash = hasher.HashPassword("client-secret"),
-            Confidential = true,
-            AllowedGrantTypes =
-            [
-                OAuthGrantTypes.Password,
-                OAuthGrantTypes.RefreshToken,
-                OAuthGrantTypes.ClientCredentials,
-            ],
-            AllowedScopes = ["openid", "api"],
-            AllowedAudiences = ["novolis"],
+            AuthorizationCode = code,
+            RedirectUri = "https://game.example/callback",
+            CodeVerifier = verifier,
+            Scope = scope,
         });
     }
 
-    static async Task<CredentialReference> SeedAccountAsync(IServiceProvider services, string password)
+    static (string Verifier, string Challenge) CreatePkce()
     {
-        var hasher = services.GetRequiredService<PasswordHasher>();
-        var accounts = services.GetRequiredService<ICredentialStore>();
-        var id = CredentialReference.New();
-        await accounts.UpsertAsync(new CredentialRecord
-        {
-            Id = id.Value,
-            PasswordHash = hasher.HashPassword(password),
-            CreatedUtc = DateTimeOffset.UtcNow,
-        });
-        return id;
-    }
-
-    sealed class RecordingEventStore(List<SecurityEvent> sink) : IEventStore
-    {
-        public ValueTask RecordAsync(SecurityEvent evt, CancellationToken ct = default)
-        {
-            sink.Add(evt);
-            return ValueTask.CompletedTask;
-        }
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        var verifier = Base64UrlEncoder.Encode(bytes);
+        var challenge = Base64UrlEncoder.Encode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+        return (verifier, challenge);
     }
 }

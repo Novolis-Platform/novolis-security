@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Novolis.Security.OAuth;
-using Novolis.Storage.Abstractions;
 using TUnit.Core;
 
 namespace Novolis.Security.Tests;
@@ -8,66 +7,37 @@ namespace Novolis.Security.Tests;
 public class JsonStoreIdentityTests
 {
     [Test]
-    public async Task JsonStores_PasswordGrant_PersistsAndRotatesRefresh()
+    public async Task Json_PersistsClientAndRefresh()
     {
-        var root = Path.Combine(Path.GetTempPath(), "novolis-idp-json-" + Guid.CreateVersion7().ToString("N"));
-        Directory.CreateDirectory(root);
+        var root = Path.Combine(Path.GetTempPath(), "novolis-oauth-json-" + Guid.NewGuid().ToString("N"));
         try
         {
             var services = new ServiceCollection();
             services.AddReferenceIdentity();
             services.AddJsonStores(root);
             await using var provider = services.BuildServiceProvider();
+            await ReferenceIdentityHost.SeedClientAsync(provider);
+            var loaded = await provider.GetRequiredService<IClientStore>().FindByClientIdAsync("space-game-web");
+            await Assert.That(loaded).IsNotNull();
+            await Assert.That(loaded!.AllowedRedirectUris[0]).IsEqualTo("https://game.example/callback");
 
-            var hasher = provider.GetRequiredService<Novolis.Security.PasswordHashing.PasswordHasher>();
-            var accountId = CredentialReference.New();
-            await provider.GetRequiredService<IClientStore>().UpsertAsync(new OAuthClient
+            var refresh = new RefreshTokenRecord
             {
-                Id = Guid.CreateVersion7(),
-                ClientId = "app",
-                SecretHash = hasher.HashPassword("client-secret"),
-                Confidential = true,
-                AllowedGrantTypes = [OAuthGrantTypes.Password, OAuthGrantTypes.RefreshToken],
-                AllowedScopes = ["api"],
-                AllowedAudiences = ["novolis"],
-            });
-            await provider.GetRequiredService<ICredentialStore>().UpsertAsync(new CredentialRecord
-            {
-                Id = accountId.Value,
-                PasswordHash = hasher.HashPassword("pw"),
+                Id = Guid.NewGuid(),
+                FamilyId = Guid.NewGuid(),
+                IdentityId = Novolis.Security.Authentication.IdentityId.New(),
+                ClientId = loaded.Id,
+                ClientPublicId = loaded.ClientId,
+                SecretHash = Convert.ToBase64String(new byte[64]),
+                Scope = "game",
+                Audience = "space-game-api",
                 CreatedUtc = DateTimeOffset.UtcNow,
-            });
-
-            var tokens = provider.GetRequiredService<ITokenService>();
-            var issued = await tokens.IssueAsync(new TokenIssueRequest
-            {
-                GrantType = OAuthGrantTypes.Password,
-                ClientId = "app",
-                ClientSecret = "client-secret",
-                CredentialReference = accountId,
-                Password = "pw",
-                Scope = "api",
-            });
-            await Assert.That(issued.Succeeded).IsTrue();
-            await Assert.That(provider.GetRequiredService<IRepository<RefreshTokenRecord>>().All().Any()).IsTrue();
-
-            var rotated = await tokens.IssueAsync(new TokenIssueRequest
-            {
-                GrantType = OAuthGrantTypes.RefreshToken,
-                ClientId = "app",
-                ClientSecret = "client-secret",
-                RefreshToken = issued.RefreshToken,
-            });
-            await Assert.That(rotated.Succeeded).IsTrue();
-
-            var replay = await tokens.IssueAsync(new TokenIssueRequest
-            {
-                GrantType = OAuthGrantTypes.RefreshToken,
-                ClientId = "app",
-                ClientSecret = "client-secret",
-                RefreshToken = issued.RefreshToken,
-            });
-            await Assert.That(replay.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(1),
+            };
+            await provider.GetRequiredService<IRefreshTokenStore>().UpsertAsync(refresh);
+            var found = await provider.GetRequiredService<IRefreshTokenStore>().TryGetAsync(refresh.Id);
+            await Assert.That(found).IsNotNull();
+            await Assert.That(found!.Audience).IsEqualTo("space-game-api");
         }
         finally
         {

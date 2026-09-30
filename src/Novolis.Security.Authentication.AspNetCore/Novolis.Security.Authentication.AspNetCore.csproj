@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Authentication.AspNetCore</PackageId>
+    <Description>ASP.NET Core façade that composes Novolis authentication sessions with the OAuth authorization server.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Authentication.AspNetCore</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Novolis.Security.Authentication\Novolis.Security.Authentication.csproj" />
+    <ProjectReference Include="..\Novolis.Security.OAuth.AspNetCore\Novolis.Security.OAuth.AspNetCore.csproj" />
+  </ItemGroup>
+</Project>
