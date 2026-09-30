@@ -17,6 +17,7 @@ public interface IAuthorizationCodeStore
         string secretHash,
         string clientId,
         string redirectUri,
+        string codeChallenge,
         DateTimeOffset now,
         CancellationToken cancellationToken = default);
 }
