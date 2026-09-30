@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Novolis.Security.Authorization.AspNetCore</PackageId>
-    <Description>ASP.NET Core metadata, policies, and tenant context for Novolis authorization.</Description>
+    <Description>ASP.NET Core metadata, policies, and tenant context for the Novolis tenant authorization framework.</Description>
     <IsPackable>true</IsPackable>
     <RootNamespace>Novolis.Security.Authorization.AspNetCore</RootNamespace>
   </PropertyGroup>

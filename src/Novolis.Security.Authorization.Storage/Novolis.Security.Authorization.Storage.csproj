@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Novolis.Security.Authorization.Storage</PackageId>
-    <Description>IRepository adapters for tenant-scoped authorization graphs.</Description>
+    <Description>IRepository adapters for tenant authorization graphs. Not OAuth storage and not an IdP.</Description>
     <IsPackable>true</IsPackable>
     <RootNamespace>Novolis.Security.Authorization.Storage</RootNamespace>
   </PropertyGroup>

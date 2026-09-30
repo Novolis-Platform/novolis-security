@@ -8,13 +8,15 @@
 
 # Novolis.Security.OAuth.AspNetCore
 
-Maps the OAuth protocol surface:
+Maps the OAuth **token-mint** protocol surface:
 
 - `GET /oauth/authorize`
 - `POST /oauth/token`
 - `POST /oauth/revoke`
 - `GET /.well-known/oauth-authorization-server`
 - `GET /.well-known/jwks.json`
+
+This is **not an OpenID Provider** and not a commercial IdP (Duende IdentityServer, Keycloak, and similar). An `openid-configuration` alias is opt-in and still advertises **OAuth-only** metadata. See [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 ## Install
 
@@ -36,8 +38,6 @@ builder.Services.AddAuthentication().AddNovolisBearer(
 var app = builder.Build();
 app.MapNovolisOAuth();
 ```
-
-This is not an OpenID Provider. An `openid-configuration` alias is opt-in and still advertises OAuth-only metadata.
 
 ## Support
 

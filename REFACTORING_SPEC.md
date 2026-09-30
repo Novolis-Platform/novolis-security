@@ -2,7 +2,9 @@
 
 ## 1. Purpose
 
-Novolis Security provides a small, self-hosted authentication and authorization stack for applications that need more than ad-hoc login but do not need a full enterprise identity platform.
+Novolis Security provides a small, self-hosted **token mint** and **tenant authorization framework** for applications that need more than ad-hoc login but do **not** need a full enterprise Identity Provider.
+
+It is **not** Duende IdentityServer, Keycloak, Auth0, or Entra. There is no OpenID Connect login protocol, no userinfo, no IdP federation, and no admin or consent UI. Positioning: [docs/what-this-is.md](docs/what-this-is.md).
 
 The primary target is a family of first-party applications such as:
 
@@ -1894,9 +1896,11 @@ negative authorization rules
 enterprise directory synchronization
 ```
 
-These may be implemented separately if real requirements emerge.
+These may be implemented separately if real requirements emerge, and they would still not make this repo a Duende IdentityServer equivalent.
 
-The project should resist becoming a miniature enterprise identity platform.
+The project should resist becoming a miniature enterprise identity platform. OAuth here is a **token mint**. Authorization here is a **tenant framework**. Neither is an IdP.
+
+The word `IdP` should be reserved for a component genuinely behaving as an identity provider. This repository is not that component. Do not treat `Novolis.Security.OAuth` as IdentityServer.
 
 ---
 
@@ -1975,7 +1979,7 @@ IdpSigningKey
     → SigningKeyRecord
 ```
 
-The word `IdP` should be reserved for a component genuinely behaving as an identity provider.
+The word `IdP` should be reserved for a component genuinely behaving as an identity provider. The OAuth family is a **token mint**, not an IdP and not Duende IdentityServer. See [docs/what-this-is.md](docs/what-this-is.md).
 
 ---
 

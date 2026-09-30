@@ -1,6 +1,6 @@
 namespace Novolis.Security.OAuth;
 
-/// <summary>Issues and revokes OAuth tokens for an authorization server.</summary>
+/// <summary>Issues and revokes OAuth access tokens for the Novolis token mint (not an OpenID Provider).</summary>
 public interface ITokenService
 {
     /// <summary>Issues an access token (and refresh token when the grant allows it).</summary>

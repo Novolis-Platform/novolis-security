@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Novolis.Security.OAuth.Storage</PackageId>
-    <Description>IRepository adapters for the limited Novolis OAuth stores.</Description>
+    <Description>IRepository adapters for the Novolis OAuth token-mint stores. Not an IdP user directory.</Description>
     <IsPackable>true</IsPackable>
     <RootNamespace>Novolis.Security.OAuth.Storage</RootNamespace>
   </PropertyGroup>

@@ -1,6 +1,6 @@
 namespace Novolis.Security.OAuth;
 
-/// <summary>OAuth 2.0 grant types supported by the Novolis authorization server.</summary>
+/// <summary>OAuth 2.0 grant types supported by the Novolis token mint (not an OpenID Provider).</summary>
 public static class OAuthGrantTypes
 {
     /// <summary>Authorization Code grant.</summary>

@@ -1,6 +1,8 @@
 # Design
 
-Password hashing, encryption, HaveIBeenPwned helpers, and the Authentication / OAuth / Authorization stack.
+Password hashing, encryption, HaveIBeenPwned helpers, an **OAuth access-token mint**, and a **tenant authorization framework**.
+
+This is not a commercial Identity Provider. It is not Duende IdentityServer. Canonical positioning: [what-this-is.md](what-this-is.md).
 
 Published docs: [https://novolis-platform.github.io/.github/novolis-security/](https://novolis-platform.github.io/.github/novolis-security/)
 
@@ -15,13 +17,15 @@ Follow [library-boundaries](https://github.com/Novolis-Platform/novolis-governan
 - Keep public APIs documented and packable as `Novolis.*` on GitHub Packages.
 - Prefer BCL types and existing Novolis packages over parallel abstractions.
 - Document restore and ProjectReference-mode builds without local NuGet folder feeds.
-- Keep Authentication, OAuth, and Authorization as separate systems.
+- Keep Authentication, OAuth, and Authorization as separate systems: sign-in, token mint, tenant authz.
 
 ## Non-goals
 
 - Local NuGet folder feeds or committed cross-repo `ProjectReference` into sibling checkouts.
 - Avalonia package references outside `Novolis.Avalonia.*`.
 - Password grant, OpenID Connect, SAML, nested groups, or negative authorization rules.
+- A full Identity Provider product: ID Tokens as login, userinfo, federation, admin UI, consent UI, dynamic client registration, PAR, JAR, CIBA, Device Code, or Token Exchange.
+- Substituting for Duende IdentityServer, Keycloak, Auth0, Microsoft Entra ID, or similar commercial IdPs.
 
 ## Packages
 
@@ -52,3 +56,5 @@ The credential vault is not a user directory.
 Authorization is tenant-scoped. Groups contain identities. Roles contain permissions. Composite roles contain roles and must remain acyclic.
 
 OAuth scopes are not application permissions.
+
+OAuth mints access tokens. Authorization decides tenant capabilities. Neither package is an IdP user directory or a replacement for IdentityServer.

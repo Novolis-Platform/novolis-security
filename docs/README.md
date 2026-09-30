@@ -1,6 +1,6 @@
 # novolis-security documentation
 
-Password hashing, encryption, and HaveIBeenPwned helpers.
+Token mint, tenant authorization, password hashing, encryption, and HaveIBeenPwned helpers. **Not a commercial Identity Provider** — see [what-this-is.md](what-this-is.md).
 
 Published docs: [https://novolis-platform.github.io/.github/novolis-security/](https://novolis-platform.github.io/.github/novolis-security/)
 
@@ -8,6 +8,7 @@ Published docs: [https://novolis-platform.github.io/.github/novolis-security/](h
 
 | Doc | What it covers |
 | --- | --- |
+| [what-this-is.md](what-this-is.md) | Token mint + tenant authz framework vs Duende IdentityServer / full IdPs |
 | [getting-started.md](getting-started.md) | Install, restore from GitHub Packages, first use |
 | [design.md](design.md) | Goals, layer placement, non-goals, credential store isolation |
 | [owasp-security-evaluation.md](owasp-security-evaluation.md) | OWASP ASVS 5.0.0 / API Top 10 / OAuth BCP evaluation of identity, hashing, and crypto libraries |
@@ -15,15 +16,16 @@ Published docs: [https://novolis-platform.github.io/.github/novolis-security/](h
 
 ## Packages
 
-| Package |
-| --- |
-| `Novolis.Security.Cryptography` |
-| `Novolis.Security.Encryption` |
-| `Novolis.Security.HaveIBeenPwned` |
-| `Novolis.Security.OAuth` / `.Abstractions` / `.AspNetCore` / `.Storage` |
-| `Novolis.Security.PasswordHashing` |
-| `Novolis.Security.Secrets` |
-| `Novolis.Security.SecureText` |
+| Package | Role |
+| --- | --- |
+| `Novolis.Security.Cryptography` | Helpers |
+| `Novolis.Security.Encryption` | Helpers |
+| `Novolis.Security.HaveIBeenPwned` | Helpers |
+| `Novolis.Security.PasswordHashing` | Helpers |
+| `Novolis.Security.Secrets` / `SecureText` | Helpers |
+| `Novolis.Security.Authentication.*` | Application sign-in (not an IdP) |
+| `Novolis.Security.OAuth.*` | Access-token mint (not IdentityServer) |
+| `Novolis.Security.Authorization.*` | Tenant authz framework (not OAuth scopes) |
 
 ## More
 

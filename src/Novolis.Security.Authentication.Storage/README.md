@@ -10,6 +10,8 @@
 
 `IRepository<T>` adapters for the identity directory and isolated credential vault. Credential rows never store `IdentityId`, email, username, phone, display name, tenant, group, or role fields.
 
+This is not an IdP user store. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
+
 ## Install
 
 ```bash

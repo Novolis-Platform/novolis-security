@@ -8,9 +8,9 @@
 
 # Novolis.Security.OAuth.Abstractions
 
-OAuth contracts: clients, authorization codes, refresh tokens, signing keys, and atomic store operations.
+Contracts for the **OAuth access-token mint**: clients, authorization codes, refresh tokens, signing keys, and atomic store operations.
 
-OAuth scopes are not application permissions. JWT `sub` is a global `IdentityId`, never a `CredentialReference`.
+OAuth scopes are not application permissions. JWT `sub` is a global `IdentityId`, never a `CredentialReference`. This is not an OpenID Provider and not Duende IdentityServer. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 ## Install
 

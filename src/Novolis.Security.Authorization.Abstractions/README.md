@@ -8,9 +8,9 @@
 
 # Novolis.Security.Authorization.Abstractions
 
-Tenant-scoped authorization contracts. Groups contain identities. Roles contain permissions. Composite roles contain roles.
+Contracts for the **tenant authorization framework**. Groups contain identities. Roles contain permissions. Composite roles contain roles.
 
-Authorization depends on Authentication abstractions only for `IdentityId`.
+Authorization depends on Authentication abstractions only for `IdentityId`. It does not reference OAuth and is not an Identity Provider. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 ## Install
 

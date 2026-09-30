@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Novolis.Security.Authorization</PackageId>
-    <Description>Tenant-scoped authorization engine with groups, roles, composite roles, and default deny.</Description>
+    <Description>Tenant authorization framework: groups, roles, composite roles, default deny. Not OAuth scopes and not an IdP.</Description>
     <IsPackable>true</IsPackable>
     <RootNamespace>Novolis.Security.Authorization</RootNamespace>
   </PropertyGroup>

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Novolis.Security.Authentication.AspNetCore</PackageId>
-    <Description>ASP.NET Core façade that composes Novolis authentication sessions with the OAuth authorization server.</Description>
+    <Description>ASP.NET Core façade for Novolis application sign-in; may map the OAuth token-mint endpoints. Not an Identity Provider.</Description>
     <IsPackable>true</IsPackable>
     <RootNamespace>Novolis.Security.Authentication.AspNetCore</RootNamespace>
   </PropertyGroup>

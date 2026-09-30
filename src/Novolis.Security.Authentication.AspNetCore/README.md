@@ -8,7 +8,9 @@
 
 # Novolis.Security.Authentication.AspNetCore
 
-High-level ASP.NET Core façade for Novolis authentication. It composes identity/credential verification, browser sessions, and the standards-oriented OAuth authorization server.
+ASP.NET Core façade for Novolis **application sign-in** (sessions). It may also map the OAuth **token-mint** endpoints for first-party hosts.
+
+This is not an Identity Provider and not Duende IdentityServer. Sign-in stays an Authentication API. Token mint stays OAuth. Tenant authz is a separate family. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 ## Install
 

@@ -8,7 +8,9 @@
 
 # Novolis.Security.Authorization.Storage
 
-`IRepository<T>` adapters for tenant-scoped groups, memberships, custom roles, assignments, and authorization versions.
+`IRepository<T>` adapters for the **tenant authorization framework**: groups, memberships, custom roles, assignments, and authorization versions.
+
+This is not OAuth storage and not an Identity Provider. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 Call after `AddNovolisAuthorization` and `AddStorage`. The host should wrap `IRoleStore` with the core validating store when accepting tenant-defined roles.
 

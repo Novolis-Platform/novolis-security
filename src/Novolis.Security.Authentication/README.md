@@ -8,7 +8,9 @@
 
 # Novolis.Security.Authentication
 
-High-level identity resolution, credential verification, and browser authentication sessions.
+Application **sign-in**: identifier resolution, isolated Argon2id credentials, browser sessions, lockout, optional `IMfaProvider`.
+
+This is not an Identity Provider, not OAuth, and not Duende IdentityServer. OAuth access tokens belong in `Novolis.Security.OAuth`. Tenant permissions belong in `Novolis.Security.Authorization`. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 ## Install
 

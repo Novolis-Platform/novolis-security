@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <strong>Passwords, encryption, breach checks</strong><br/>
-  Password hashing, encryption, and HaveIBeenPwned helpers.
+  <strong>Token mint, tenant authorization, passwords, encryption</strong><br/>
+  An OAuth access-token mint and tenant authz framework you compose in a product host — not a commercial Identity Provider.
 </p>
 
 <p align="center">
@@ -65,7 +65,9 @@ For NuGet.org and Visual Studio, the **embedded** README.md inside each package 
 <!-- novolis-package-index:end -->
 # Security
 
-Cryptography, secret generation, password hashing, and breach-checking libraries for the Novolis platform.
+Cryptography, secret generation, password hashing, breach checks, an **access-token mint**, and a **tenant authorization framework** for Novolis product hosts.
+
+**This is not a full Identity Provider.** It is not Duende IdentityServer, Keycloak, Auth0, or Entra. There is no OpenID Connect login protocol, no userinfo, no federation, and no admin/consent UI. Read [What this is (and is not)](docs/what-this-is.md) before treating these packages as an IdP.
 
 ## Packages
 
@@ -77,9 +79,9 @@ Cryptography, secret generation, password hashing, and breach-checking libraries
 | `Novolis.Security.Encryption` | AES-256-GCM string encryption |
 | `Novolis.Security.HaveIBeenPwned` | Pwned Passwords range API client |
 | `Novolis.Security.SecureText` | Device identities and crypto primitives for end-to-end text |
-| `Novolis.Security.Authentication.*` | Global identity, isolated credentials, and browser sessions |
-| `Novolis.Security.OAuth.*` | Authorization Code + PKCE, client credentials, rotating refresh tokens, ES384 JWTs |
-| `Novolis.Security.Authorization.*` | Tenant-scoped groups, roles, permissions, and default-deny evaluation |
+| `Novolis.Security.Authentication.*` | Application sign-in: identifier, isolated credentials, browser sessions. Not an OAuth password grant. Not an IdP. |
+| `Novolis.Security.OAuth.*` | Access-token mint: Authorization Code + PKCE, client credentials, rotating refresh, ES384 JWTs with `cnf`. Not an OpenID Provider. |
+| `Novolis.Security.Authorization.*` | Tenant-scoped default-deny groups, roles, and permissions. Not OAuth scopes. |
 
 `Novolis.Security.WordLists` is an internal dependency (embedded word/character lists).
 
@@ -104,8 +106,10 @@ var passphrase = secrets.GenerateWordPassphrase();
 
 ## Documentation
 
+- [What this is (and is not)](docs/what-this-is.md) — token mint + tenant authz; not a commercial IdP
 - [Getting started](docs/getting-started.md)
 - [Design](docs/design.md)
+- [OWASP evaluation](docs/owasp-security-evaluation.md)
 - [Release](docs/release.md)
 
 ## Contributing

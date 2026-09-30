@@ -10,7 +10,7 @@
 | Security check | **Passed** (selected ASVS 5.0.0 Level 2 library controls) |
 | Overall | MFA is a product plug-in (`IMfaProvider`, default `NoopMfaProvider`). Sign-in failures share a cache-backed counter and disable the credential when the budget is spent. `ICacheStore` is in-memory for tests and a single process; a farm replaces it with a distributed store. Authentication and OAuth events default to `ILogger`. |
 
-This is a library evaluation, not a hosted-product pentest. TLS, edge WAF, key custody, and the concrete MFA method (TOTP, WebAuthn, SMS) live in the executable host.
+This is a **library** evaluation of a token mint and tenant authorization framework, not a hosted Identity Provider pentest and not an evaluation of Duende IdentityServer. TLS, edge WAF, key custody, consent UI, and the concrete MFA method (TOTP, WebAuthn, SMS) live in the executable host. See [what-this-is.md](what-this-is.md).
 
 ## 1. Scope
 
@@ -29,6 +29,7 @@ This is a library evaluation, not a hosted-product pentest. TLS, edge WAF, key c
 **Out of scope**
 
 - OpenID Connect, SAML, dynamic client registration, PAR, JAR
+- Duende IdentityServer / Keycloak / Auth0 / Entra feature parity (this library is a token mint + tenant authz, not an IdP)
 - A built-in TOTP/WebAuthn/SMS implementation (the host supplies `IMfaProvider`)
 - Host TLS, HSTS, WAF, HSM, SIEM
 
@@ -307,6 +308,7 @@ Reference host: `tests/Novolis.Security.OAuth.Integration/ReferenceIdentityHost.
 | Sender-constrained access tokens | Pass (DPoP or certificate thumbprint) |
 | SQLite as a client store | Pass |
 | Fit as an OpenID Provider | No |
+| Fit as Duende IdentityServer / commercial IdP | No |
 
 **Security check: Passed.** Selected ASVS 5.0.0 Level 2 library controls for this identity core are met. A hosted product still needs TLS, a distributed cache when it scales out, a registered breach checker outside Development, and a real `IMfaProvider` when a second factor is required. Event sinks already default to `ILogger`.
 
@@ -326,3 +328,4 @@ Unit: 95 passed, 1 skipped network check. Integration: 4 passed.
 - OWASP Password Storage, Authentication, Cryptographic Storage, and JWT cheat sheets
 - RFC 6749, RFC 7009, RFC 7636, RFC 7638, RFC 8414, RFC 9449, RFC 9700
 - [design.md](design.md)
+- [what-this-is.md](what-this-is.md)

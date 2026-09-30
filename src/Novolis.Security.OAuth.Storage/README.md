@@ -8,7 +8,9 @@
 
 # Novolis.Security.OAuth.Storage
 
-`IRepository<T>` adapters for OAuth clients, authorization codes, refresh tokens, and signing keys. List and identity fields are packed into SQLite-safe scalar rows.
+`IRepository<T>` adapters for the OAuth **token mint** stores: clients, authorization codes, refresh tokens, and signing keys. List and identity fields are packed into SQLite-safe scalar rows.
+
+This is storage for a token mint, not an Identity Provider user directory. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 Rotation and one-time code consumption are process-local atomic. Multi-instance hosts must supply a transactional store if they require distributed compare-and-swap.
 

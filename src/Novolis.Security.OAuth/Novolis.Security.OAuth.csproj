@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Novolis.Security.OAuth</PackageId>
-    <Description>Standards-oriented OAuth authorization server with JWT access tokens and rotating refresh tokens.</Description>
+    <Description>OAuth access-token mint (Authorization Code + PKCE, rotating refresh, ES384 JWT). Not an OpenID Provider or IdentityServer replacement.</Description>
     <IsPackable>true</IsPackable>
     <RootNamespace>Novolis.Security.OAuth</RootNamespace>
   </PropertyGroup>

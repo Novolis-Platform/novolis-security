@@ -8,7 +8,9 @@
 
 # Novolis.Security.Authorization
 
-Tenant-scoped authorization engine. Groups contain identities. Roles contain permissions. Composite roles contain roles and form an acyclic graph.
+**Tenant authorization framework.** Groups contain identities. Roles contain permissions. Composite roles contain roles and form an acyclic graph. Tenant is always explicit. Default is deny.
+
+This is not OAuth scopes, not an Identity Provider, and not Duende IdentityServer. Access tokens are minted by `Novolis.Security.OAuth`. Sign-in is `Novolis.Security.Authentication`. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 ## Install
 

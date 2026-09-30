@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Novolis.Security.Authentication.Storage</PackageId>
-    <Description>IRepository adapters for isolated identity-directory and credential-vault records.</Description>
+    <Description>IRepository adapters for isolated identity-directory and credential-vault records. Not an IdP user store.</Description>
     <IsPackable>true</IsPackable>
     <RootNamespace>Novolis.Security.Authentication.Storage</RootNamespace>
   </PropertyGroup>

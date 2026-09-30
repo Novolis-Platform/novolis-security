@@ -22,7 +22,7 @@ public static class OAuthAspNetCoreServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>Configures in-process validation against this authorization server's key ring.</summary>
+    /// <summary>Configures in-process validation against this token mint's key ring.</summary>
     public static Microsoft.AspNetCore.Authentication.AuthenticationBuilder AddNovolisJwtBearer(
         this Microsoft.AspNetCore.Authentication.AuthenticationBuilder builder)
     {

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Novolis.Security.Authorization.Abstractions</PackageId>
-    <Description>Tenant-scoped authorization contracts: groups, roles, permissions, and decisions.</Description>
+    <Description>Tenant authorization contracts: groups, roles, permissions, and decisions. Not an Identity Provider.</Description>
     <IsPackable>true</IsPackable>
     <RootNamespace>Novolis.Security.Authorization</RootNamespace>
   </PropertyGroup>

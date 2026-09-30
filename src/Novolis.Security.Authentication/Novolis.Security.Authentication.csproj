@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>Novolis.Security.Authentication</PackageId>
-    <Description>High-level identity, credential verification, and authentication-session services.</Description>
+    <Description>Application sign-in: identity, isolated credentials, and browser sessions. Not an Identity Provider.</Description>
     <IsPackable>true</IsPackable>
     <RootNamespace>Novolis.Security.Authentication</RootNamespace>
   </PropertyGroup>

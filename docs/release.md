@@ -2,6 +2,8 @@
 
 This repository publishes with the org CalVer scheme (`2026.1.*`) via `merge.yml` to GitHub Packages when packages are packable.
 
+These packages are a **token mint** and **tenant authorization framework**, not a commercial IdP. See [what-this-is.md](what-this-is.md).
+
 See [release-policy](https://github.com/Novolis-Platform/novolis-governance/blob/main/docs/release-policy.md).
 
 Published docs: [https://novolis-platform.github.io/.github/novolis-security/](https://novolis-platform.github.io/.github/novolis-security/)

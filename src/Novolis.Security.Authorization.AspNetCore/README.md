@@ -8,7 +8,9 @@
 
 # Novolis.Security.Authorization.AspNetCore
 
-Metadata-only generic attributes and minimal API extensions for Novolis authorization.
+Metadata-only generic attributes and minimal API extensions for the Novolis **tenant authorization framework**.
+
+This is not OAuth and not an Identity Provider. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 ## Install
 

@@ -8,9 +8,9 @@
 
 # Novolis.Security.Authentication.Abstractions
 
-Global `IdentityId`, opaque `CredentialReference`, identity-directory, credential-vault, and browser-session contracts.
+Contracts for application sign-in: global `IdentityId`, opaque `CredentialReference`, identity-directory, credential-vault, browser-session, cache, and MFA plug-in.
 
-The credential vault is not a user directory. `CredentialReference` is never a JWT subject.
+The credential vault is not a user directory and not an IdP. `CredentialReference` is never a JWT subject. Product positioning: [what this is](https://github.com/Novolis-Platform/novolis-security/blob/main/docs/what-this-is.md).
 
 ## Install
 
