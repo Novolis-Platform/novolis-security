@@ -95,6 +95,10 @@ public static class OAuthEndpointRouteBuilderExtensions
         if (!issued.Succeeded || issued.Code is null)
             return RedirectOrError(context, redirectUri, state, issued.Error ?? OAuthTokenErrors.InvalidRequest);
 
+        var responseMode = request["response_mode"].ToString();
+        if (string.Equals(responseMode, "form_post", StringComparison.Ordinal))
+            return FormPost(redirectUri, issued.Code, state);
+
         var location = QueryHelpers.AddQueryString(
             redirectUri,
             new Dictionary<string, string?>
@@ -197,6 +201,7 @@ public static class OAuthEndpointRouteBuilderExtensions
                     OAuthGrantTypes.RefreshToken,
                 },
                 response_types_supported = new[] { "code" },
+                response_modes_supported = new[] { "query", "form_post" },
                 code_challenge_methods_supported = new[] { "S256" },
                 token_endpoint_auth_methods_supported = new[] { "client_secret_post", "client_secret_basic" },
             },
@@ -297,7 +302,21 @@ public static class OAuthEndpointRouteBuilderExtensions
         context.Request.ContentType is { } contentType
         && contentType.StartsWith("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase);
 
-    static IResult RedirectOrError(
+    static IResult FormPost(string redirectUri, string code, string? state)
+    {
+        var action = WebUtility.HtmlEncode(redirectUri);
+        var encodedCode = WebUtility.HtmlEncode(code);
+        var stateInput = string.IsNullOrWhiteSpace(state)
+            ? ""
+            : $"<input type=\"hidden\" name=\"state\" value=\"{WebUtility.HtmlEncode(state)}\" />";
+        var html =
+            "<!DOCTYPE html><html><body>"
+            + $"<form method=\"post\" action=\"{action}\">"
+            + $"<input type=\"hidden\" name=\"code\" value=\"{encodedCode}\" />"
+            + stateInput
+            + "</form><script>document.forms[0].submit()</script></body></html>";
+        return Results.Content(html, "text/html; charset=utf-8");
+    }
         HttpContext context,
         string redirectUri,
         string? state,

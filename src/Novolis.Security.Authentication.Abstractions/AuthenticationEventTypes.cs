@@ -24,6 +24,9 @@ public static class AuthenticationEventTypes
     /// <summary>A browser session was revoked.</summary>
     public const string SessionRevoked = "session_revoked";
 
+    /// <summary>Every session and OAuth grant for the identity was revoked.</summary>
+    public const string GrantsRevoked = "grants_revoked";
+
     /// <summary>An identity was disabled.</summary>
     public const string IdentityDisabled = "identity_disabled";
 }

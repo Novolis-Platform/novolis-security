@@ -34,6 +34,14 @@ public interface IAuthenticationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Revokes every browser session and notifies revocation sinks (refresh families and access-token cutoff).
+    /// Product UIs bind "sign out everywhere" to this method.
+    /// </summary>
+    ValueTask RevokeGrantsAsync(
+        IdentityId identityId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Disables the identity, revokes every browser session, and notifies revocation sinks.
     /// </summary>
     ValueTask DisableAsync(

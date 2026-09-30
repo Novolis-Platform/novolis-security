@@ -16,6 +16,11 @@ public sealed class AuthenticationOptions
     public bool IsDevelopment { get; set; }
 
     /// <summary>
+    /// Idle lifetime after the last successful session lookup. Absolute <see cref="SessionLifetime"/> still applies.
+    /// </summary>
+    public TimeSpan SessionIdleTimeout { get; set; } = TimeSpan.FromMinutes(20);
+
+    /// <summary>
     /// Failed sign-in attempts against one credential before it is disabled.
     /// The count lives in <see cref="ICacheStore"/> so a farm shares the same window.
     /// </summary>

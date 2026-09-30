@@ -137,6 +137,62 @@ public sealed class SigningKeyRing
         }
     }
 
+    /// <summary>
+    /// Installs a new ES384 current signer and keeps previous keys for validation until they expire from JWKS.
+    /// </summary>
+    public async ValueTask RotateAsync(
+        string pem,
+        string? kid = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(pem);
+        var next = LoadPrivateKey(pem, kid);
+        var now = _time.GetUtcNow();
+        EnsureLoaded();
+        var previous = _signing;
+
+        var active = await _store.GetActiveAsync(now, cancellationToken).ConfigureAwait(false);
+        foreach (var key in active.Where(item => item.Current))
+        {
+            key.Current = false;
+            await _store.UpsertAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+
+        var pub = ToPublic(next);
+        var jwk = JsonWebKeyConverter.ConvertFromECDsaSecurityKey(pub);
+        jwk.D = null;
+        jwk.Use = "sig";
+        jwk.Alg = SecurityAlgorithms.EcdsaSha384;
+        await _store.UpsertAsync(
+            new SigningKeyRecord
+            {
+                Id = Guid.NewGuid(),
+                Kid = next.KeyId ?? "",
+                Alg = SecurityAlgorithms.EcdsaSha384,
+                PublicJwk = jwk.ToString(),
+                PrivatePem = pem,
+                CreatedUtc = now,
+                Enabled = true,
+                Current = true,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        lock (_gate)
+        {
+            _signing = next;
+            var keys = _validation.ToList();
+            if (previous is not null)
+                keys.Add(ToPublic(previous));
+            keys.Insert(0, pub);
+            _validation = keys
+                .GroupBy(k => k.KeyId ?? "", StringComparer.Ordinal)
+                .Select(g => g.First())
+                .ToArray();
+        }
+
+        _logger.LogInformation("Rotated OAuth signing key to kid={Kid}.", next.KeyId);
+    }
+
     static ECDsaSecurityKey LoadPrivateKey(string pem, string? kid)
     {
         var ecdsa = ECDsa.Create();

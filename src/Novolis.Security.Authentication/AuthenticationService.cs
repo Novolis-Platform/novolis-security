@@ -226,6 +226,23 @@ public sealed class AuthenticationService : IAuthenticationService
     }
 
     /// <inheritdoc />
+    public async ValueTask RevokeGrantsAsync(
+        IdentityId identityId,
+        CancellationToken cancellationToken = default)
+    {
+        var now = _time.GetUtcNow();
+        await _sessions.RevokeAllForIdentityAsync(identityId, now, exceptSessionId: null, cancellationToken)
+            .ConfigureAwait(false);
+        await NotifyRevocationAsync(identityId, now, cancellationToken).ConfigureAwait(false);
+        await ObserveAsync(
+            AuthenticationEventTypes.GrantsRevoked,
+            identityId,
+            null,
+            null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async ValueTask<IdentityId?> GetAuthenticatedIdentityAsync(
         string sessionId,
         CancellationToken cancellationToken = default)
@@ -234,8 +251,29 @@ public sealed class AuthenticationService : IAuthenticationService
             return null;
 
         var session = await _sessions.TryGetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        if (session is null || !session.IsActive(_time.GetUtcNow()))
+        var now = _time.GetUtcNow();
+        if (session is null || !session.IsActive(now))
             return null;
+
+        if (_options.SessionIdleTimeout > TimeSpan.Zero)
+        {
+            var last = await _cache.GetAsync(IdleKey(sessionId), cancellationToken).ConfigureAwait(false);
+            var lastUtc = last > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(last)
+                : session.IssuedUtc;
+            if (now - lastUtc > _options.SessionIdleTimeout)
+                return null;
+
+            var remaining = session.ExpiresUtc - now;
+            if (remaining > TimeSpan.Zero)
+            {
+                await _cache.SetAsync(
+                    IdleKey(sessionId),
+                    now.ToUnixTimeSeconds(),
+                    remaining,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
 
         var identity = await _identities.TryGetAsync(session.IdentityId, cancellationToken).ConfigureAwait(false);
         if (identity is { Disabled: true })
@@ -292,6 +330,11 @@ public sealed class AuthenticationService : IAuthenticationService
                 now + _options.SessionLifetime,
                 cancellationToken).ConfigureAwait(false);
             sessionId = session.SessionId;
+            await _cache.SetAsync(
+                IdleKey(session.SessionId),
+                now.ToUnixTimeSeconds(),
+                _options.SessionLifetime,
+                cancellationToken).ConfigureAwait(false);
             await _sessions.RevokeAllForIdentityAsync(
                 identity.Id,
                 now,
@@ -357,6 +400,9 @@ public sealed class AuthenticationService : IAuthenticationService
             _options.SignInFailureWindow,
             cancellationToken).ConfigureAwait(false);
     }
+
+    static string IdleKey(string sessionId) =>
+        "auth:idle:" + sessionId;
 
     static string FailureKey(CredentialReference reference) =>
         "auth:fail:cred:" + reference;

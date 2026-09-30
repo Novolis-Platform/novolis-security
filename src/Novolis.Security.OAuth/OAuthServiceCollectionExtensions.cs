@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Novolis.Security.Authentication;
 
 namespace Novolis.Security.OAuth;
@@ -27,7 +29,14 @@ public static class OAuthServiceCollectionExtensions
         services.TryAddSingleton<ISigningKeyStore, InMemorySigningKeyStore>();
         services.TryAddSingleton<IKeyStore>(sp => sp.GetRequiredService<ISigningKeyStore>());
         services.TryAddSingleton<ICacheStore>(sp => new InMemoryCacheStore(sp.GetRequiredService<TimeProvider>()));
-        services.TryAddSingleton<IEventStore>(_ => NoopEventStore.Instance);
+        services.TryAddSingleton<IEventStore>(sp =>
+        {
+            var factory = sp.GetService<ILoggerFactory>();
+            ILogger<LoggerEventStore> logger = factory is null
+                ? NullLogger<LoggerEventStore>.Instance
+                : factory.CreateLogger<LoggerEventStore>();
+            return new LoggerEventStore(logger);
+        });
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IIdentityRevocation, IdentityOAuthRevocation>());
         services.TryAddSingleton<SigningKeyRing>();
         services.TryAddSingleton<OAuthTokenService>();

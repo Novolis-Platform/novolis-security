@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Novolis.Security.PasswordHashing;
 
@@ -29,7 +31,14 @@ public static class AuthenticationServiceCollectionExtensions
         services.TryAddSingleton<IAuthenticationSessionStore, InMemoryAuthenticationSessionStore>();
         services.TryAddSingleton<ICacheStore>(sp => new InMemoryCacheStore(sp.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<IMfaProvider>(_ => NoopMfaProvider.Instance);
-        services.TryAddSingleton<IAuthenticationEventSink>(_ => NoopAuthenticationEventSink.Instance);
+        services.TryAddSingleton<IAuthenticationEventSink>(sp =>
+        {
+            var factory = sp.GetService<ILoggerFactory>();
+            ILogger<LoggerAuthenticationEventSink> logger = factory is null
+                ? NullLogger<LoggerAuthenticationEventSink>.Instance
+                : factory.CreateLogger<LoggerAuthenticationEventSink>();
+            return new LoggerAuthenticationEventSink(logger);
+        });
         services.TryAddSingleton<AuthenticationService>();
         services.TryAddSingleton<IAuthenticationService>(sp =>
             sp.GetRequiredService<AuthenticationService>());
