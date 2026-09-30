@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Authentication</PackageId>
+    <Description>High-level identity, credential verification, and authentication-session services.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Authentication</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Novolis.Security.Authentication.Abstractions\Novolis.Security.Authentication.Abstractions.csproj" />
+    <ProjectReference Include="..\Novolis.Security.PasswordHashing\Novolis.Security.PasswordHashing.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+</Project>

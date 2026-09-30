@@ -7,10 +7,10 @@
 | Version evaluated | Working tree on `main` (CalVer `2026.1.*`) |
 | Evaluator | Maintainer review + automated red-team suite |
 | Security check | **Failed** |
-| Overall | Checklist is **Failed**. Crypto and JWT validation are a conditional pass for a *limited first-party identity library* — not a full IDP host, and not a replacement for an OpenID Provider |
-| Tests | `tests/Novolis.Security.Unit` plus `tests/Novolis.Security.Idp.Integration` |
+| Overall | Checklist is **Failed**. Crypto and JWT validation are a conditional pass for a *limited first-party identity library* — not a full OAuth host, and not a replacement for an OpenID Provider |
+| Tests | `tests/Novolis.Security.Unit` plus `tests/Novolis.Security.OAuth.Integration` |
 
-This report is a library evaluation, not a hosted-product pentest. TLS, reverse proxies, key custody, and account directories live in the **executable host** (a full IDP, if you ship one). `Novolis.Security.Idp*` is identity / authentication code, not that host.
+This report is a library evaluation, not a hosted-product pentest. TLS, reverse proxies, key custody, and account directories live in the **executable host** (a full OAuth, if you ship one). `Novolis.Security.OAuth*` is identity / authentication code, not that host.
 
 Scores below are against the code as it is. Fixed items were moved; remaining gaps were not re-labelled Pass or N/A to make the sheet look clean.
 
@@ -18,7 +18,7 @@ Scores below are against the code as it is. Fixed items were moved; remaining ga
 
 **In scope**
 
-- `Novolis.Security.Idp*` — ES384 access tokens, Argon2id credentials, rotating refresh tokens, `/oauth/token`, `/oauth/revoke`, JWKS, discovery
+- `Novolis.Security.OAuth*` — ES384 access tokens, Argon2id credentials, rotating refresh tokens, `/oauth/token`, `/oauth/revoke`, JWKS, discovery
 - `Novolis.Security.PasswordHashing` — Argon2id PHC
 - `Novolis.Security.Encryption` — AES-256-GCM
 - `Novolis.Security.Cryptography` — CSPRNG, fixed-time compare, HKDF-SHA512
@@ -30,11 +30,11 @@ Scores below are against the code as it is. Fixed items were moved; remaining ga
 
 - Authorization-code + PKCE, OIDC hybrid/implicit, federation, userinfo, consent UI
 - IdentityServer / Duende / OpenIddict feature parity
-- Email/username directory (forbidden on `IdpAccount`; see [design.md](design.md))
+- Email/username directory (forbidden on `CredentialRecord`; see [design.md](design.md))
 - Host TLS, HSTS, WAF, SIEM, HSM
-- A full IDP product (installer, edge, directory, operator UX)
+- A full OAuth product (installer, edge, directory, operator UX)
 
-The library is a **first-party token mint** for confidential clients. The resource-owner password grant takes an already-resolved `AccountId` GUID, not a login name.
+The library is a **first-party token mint** for confidential clients. The resource-owner password grant takes an already-resolved `CredentialReference` GUID, not a login name.
 
 ## 2. Methodology
 
@@ -60,14 +60,14 @@ Severity for findings: **Critical / High / Medium / Low / Info**.
 
 Cryptography and JWT validation are in good shape: Argon2id (OWASP 2024 first recommendation), AES-256-GCM, ES384-only validation, public JWKS, rotating hashed refresh secrets, dummy Argon2 verify to blunt user enumeration, Unicode NFC on hash/verify, and a red-team suite that exercises alg=none, HMAC confusion, RS256/ES256, `jku` injection, refresh reuse, and scope elevation.
 
-The largest *inherent* risk is still the **resource-owner password credentials (ROPC)** grant. RFC 9700 discourages it. Confidential clients, opaque `AccountId`, NFC, dummy verify, and per-account failure counters reduce abuse; they do not make ROPC a good public login. That stays a finding, not a Pass.
+The largest *inherent* risk is still the **resource-owner password credentials (ROPC)** grant. RFC 9700 discourages it. Confidential clients, opaque `CredentialReference`, NFC, dummy verify, and per-account failure counters reduce abuse; they do not make ROPC a good public login. That stays a finding, not a Pass.
 
 The largest *operational* risks that remain:
 
 - Refresh reuse detection needs a **shared** `ICacheStore` (and preferably a transactional `TryRotateAsync`) across processes. In-memory cache + in-memory store is single-node only.
 - Token-attempt limiting is **per `client_id`**. Rotating `client_id` bypasses it. The ASP.NET IP `RateLimiter` was removed; the host must put IP limits at the edge.
 - Access tokens are **bearer**. No DPoP / mTLS.
-- `Novolis.Storage.Sqlite` cannot persist `IdpClient` (`List<string>` has no SQLite affinity). JSON can. Do not ship SQLite as the client table without changing the entity or the mapper.
+- `Novolis.Storage.Sqlite` cannot persist `OAuthClient` (`List<string>` has no SQLite affinity). JSON can. Do not ship SQLite as the client table without changing the entity or the mapper.
 
 ## 4. Threat model (library)
 
@@ -87,7 +87,7 @@ Assumed host: HTTPS only, PEM not in source control, in-memory stores only for t
 
 | ID | Control | Score | Evidence |
 | --- | --- | --- | --- |
-| 2.1.1 | User identifier not the password | **Pass** | `IdpAccount` has no email/username; password grant uses `AccountId` |
+| 2.1.1 | User identifier not the password | **Pass** | `CredentialRecord` has no email/username; password grant uses `CredentialReference` |
 | 2.1.7–2.1.9 | Password length limits | **Pass** | `MaxPasswordLength` default 1024; oversize verify returns false (DoS guard) |
 | 2.2.1 | Anti-automation on login | **Partial** | Per-`client_id` cache window (30/min) plus per-account password failures (10/15 min). No captcha. No IP limit in this library (F-03). Rotating `client_id` bypasses the attempt counter |
 | 2.4.1 | Approved one-way function | **Pass** | Argon2id PHC; no PBKDF2/legacy verify |
@@ -126,7 +126,7 @@ Assumed host: HTTPS only, PEM not in source control, in-memory stores only for t
 
 | ID | Control | Score | Evidence |
 | --- | --- | --- | --- |
-| 8.2.1 | Sensitive data minimized | **Pass** | Credential row is `Id` + hash + disabled + timestamp; JWT `sub` is AccountId, not email |
+| 8.2.1 | Sensitive data minimized | **Pass** | Credential row is `Id` + hash + disabled + timestamp; JWT `sub` is CredentialReference, not email |
 | 8.2.2 | No secrets in logs | **Pass** | Token service does not log passwords. HIBP client logs suffix **count** at Debug, not the range body |
 | 8.3.4 | Sensitive data not in GET | **Pass** | Token endpoint is POST + `application/x-www-form-urlencoded` only |
 | 8.3.5 | Cache-Control on sensitive responses | **Pass** | Token and revoke: `Cache-Control: no-store`, `Pragma: no-cache` |
@@ -136,7 +136,7 @@ Assumed host: HTTPS only, PEM not in source control, in-memory stores only for t
 | ID | Control | Score | Evidence |
 | --- | --- | --- | --- |
 | 9.1 | TLS | **N/A** | Host must terminate TLS. Issuer default is `https://idp.novolis.local` as a hint, not enforcement |
-| 9.2 | HTTP header injection / Host header | **Pass** | Discovery `issuer` comes from `IdpOptions`, not `Host` |
+| 9.2 | HTTP header injection / Host header | **Pass** | Discovery `issuer` comes from `OAuthOptions`, not `Host` |
 
 ### V14 — Configuration
 
@@ -158,7 +158,7 @@ Assumed host: HTTPS only, PEM not in source control, in-memory stores only for t
 | API5 | Broken function level authorization | **Pass** | Unsupported grants (`authorization_code`, device, jwt-bearer, token-exchange) fail closed. Discovery does not advertise an authorization endpoint |
 | API6 | Unrestricted access to sensitive business flows | **Partial** | Password grant is the sensitive flow; library rate limit is `client_id`-scoped only |
 | API7 | Server-side request forgery | **Pass** | No URL fetch from client input. `jku` in a JWT is not followed; validation uses the process key ring |
-| API8 | Security misconfiguration | **Partial** | Ephemeral signing key blocked outside Development. Hosts can still ship in-memory stores or skip HTTPS. SQLite + `IdpClient` is not a working production mapping (F-10) |
+| API8 | Security misconfiguration | **Partial** | Ephemeral signing key blocked outside Development. Hosts can still ship in-memory stores or skip HTTPS. SQLite + `OAuthClient` is not a working production mapping (F-10) |
 | API9 | Improper inventory | **Partial** | Discovery lists the three grants and ES384. This is not a full OIDC OP — do not list it as one in a product catalog |
 | API10 | Unsafe API consumption | **Partial** | HIBP uses k-anonymity (5-char SHA-1 prefix). Host must pin `https://api.pwnedpasswords.com`. Range body is no longer logged |
 
@@ -193,10 +193,10 @@ Assumed host: HTTPS only, PEM not in source control, in-memory stores only for t
 | Item | Score |
 | --- | --- |
 | Sender-constrained access tokens (DPoP / mTLS) | **Fail** (Info) — bearer tokens; host network isolation required (F-07) |
-| Avoid ROPC | **Partial** — grant exists; confidential + AccountId only (F-01). Not Pass |
+| Avoid ROPC | **Partial** — grant exists; confidential + CredentialReference only (F-01). Not Pass |
 | Avoid implicit grant | **Pass** — unsupported |
 | Refresh rotation + reuse detection | **Pass** in-process with `ICacheStore` + `TryRotateAsync`; **Partial** multi-instance without a shared cache (F-02) |
-| Refresh cannot expand scope | **Pass** — original scope stored on `IdpRefreshToken` (tested) |
+| Refresh cannot expand scope | **Pass** — original scope stored on `RefreshTokenRecord` (tested) |
 | Unknown scopes on password / client_credentials | **Pass** — `invalid_scope` when any requested token is not on the client allow-list |
 | Exact redirect URI | **N/A** — no authorize endpoint |
 | PKCE | **N/A** — no authorize endpoint |
@@ -210,7 +210,7 @@ Assumed host: HTTPS only, PEM not in source control, in-memory stores only for t
 - **Severity:** High (inherent), mitigated to Medium in this design
 - **ASVS / BCP:** API2, RFC 9700 §2.4
 - **What:** `grant_type=password` is online password verification at the token endpoint. Phishing and credential-stuffing are easier than with code+PKCE.
-- **Mitigations in tree:** confidential clients only; RFC `username` is an `AccountId` GUID (`TryParseExact` D/N); identifier directory is a different system; dummy Argon2; per-account failure window; same `invalid_grant` for miss/wrong/disabled.
+- **Mitigations in tree:** confidential clients only; RFC `username` is an `CredentialReference` GUID (`TryParseExact` D/N); identifier directory is a different system; dummy Argon2; per-account failure window; same `invalid_grant` for miss/wrong/disabled.
 - **Host:** Do not expose this grant to public SPA/native apps. Put HIBP checks in the **directory** at password-set time, not in this library. ROPC is not closed; do not score it Pass.
 
 ### F-02 — Refresh reuse detection is not farm-safe by default
@@ -246,22 +246,22 @@ Unknown requested scopes now return `invalid_scope` instead of silent intersecti
 ### F-08 — In-memory stores are not a production vault
 
 - **Severity:** Info (misconfiguration)
-- **What:** `AddNovolisIdp` registers in-memory stores. `AddNovolisIdpStorage` swaps in `IRepository<T>`. Default `IEventStore` is a no-op.
+- **What:** `AddNovolisOAuth` registers in-memory stores. `AddNovolisOAuthStorage` swaps in `IRepository<T>`. Default `IEventStore` is a no-op.
 - **Host:** Production must call storage + persist signing PEM. Ephemeral P-384 is Development-only and already throws otherwise.
 
-### F-09 — `IdpClient.Disabled` — closed
+### F-09 — `OAuthClient.Disabled` — closed
 
 Disabled clients fail closed as `invalid_client` (same error class as a bad secret). Public clients remain `unauthorized_client`.
 
-### F-10 — SQLite cannot persist `IdpClient`
+### F-10 — SQLite cannot persist `OAuthClient`
 
 - **Severity:** Medium (if you planned SQLite as the production client table)
-- **What:** `IdpClient.AllowedGrantTypes` / `AllowedScopes` / `AllowedAudiences` are `List<string>`. `Novolis.Storage.Sqlite` has no affinity for that type; constructing `IRepository<IdpClient>` throws `KeyNotFoundException`. JSON file storage round-trips. Scalar rows (`IdpAccount`, `IdpRefreshToken`) work on SQLite.
+- **What:** `OAuthClient.AllowedGrantTypes` / `AllowedScopes` / `AllowedAudiences` are `List<string>`. `Novolis.Storage.Sqlite` has no affinity for that type; constructing `IRepository<OAuthClient>` throws `KeyNotFoundException`. JSON file storage round-trips. Scalar rows (`CredentialRecord`, `RefreshTokenRecord`) work on SQLite.
 - **Host:** Use JSON (or a mapper that stores lists as TEXT) for clients, or change the entity. Do not claim SQLite is a drop-in production store for this library.
 
 ## 9. What the red-team suite already proved
 
-Source: `tests/Novolis.Security.Unit/IdpRedTeamTests.cs`, `IdpAttackSurfaceTests.cs`, plus hasher/encryptor tests.
+Source: `tests/Novolis.Security.Unit/OAuthRedTeamTests.cs`, `OAuthAttackSurfaceTests.cs`, plus hasher/encryptor tests.
 
 | Attack | Result |
 | --- | --- |
@@ -282,7 +282,7 @@ Source: `tests/Novolis.Security.Unit/IdpRedTeamTests.cs`, `IdpAttackSurfaceTests
 | `alg=none`, HS256 confusion, RS256, ES256, `jku` | invalid |
 | Tampered payload | invalid |
 | JWKS contains `d` | false |
-| `sub` is AccountId, no `@` | true |
+| `sub` is CredentialReference, no `@` | true |
 | Basic vs form client mix-up | `invalid_client` |
 | Refresh after disable / revoke | `invalid_grant` |
 | Refresh scope escalation | `invalid_scope` |
@@ -297,12 +297,12 @@ Source: `tests/Novolis.Security.Unit/IdpRedTeamTests.cs`, `IdpAttackSurfaceTests
 
 ## 10. Host production checklist
 
-Do this in the executable (the IDP, if you run one), not in the library:
+Do this in the executable (the OAuth, if you run one), not in the library:
 
 1. HTTPS only; HSTS at the edge.
-2. Set `IdpOptions.Issuer` to the public HTTPS origin; set `Audiences`.
+2. Set `OAuthOptions.Issuer` to the public HTTPS origin; set `Audiences`.
 3. Provide P-384 PKCS#8 PEM (`SigningKeyPem`) or a signing-key store with private material. Never `AllowEphemeralSigningKey` in production.
-4. `AddNovolisIdpStorage` + durable `IRepository<T>` — not in-memory. JSON works for all entities; SQLite does **not** work for `IdpClient` (F-10).
+4. `AddNovolisOAuthStorage` + durable `IRepository<T>` — not in-memory. JSON works for all entities; SQLite does **not** work for `OAuthClient` (F-10).
 5. Keep the identifier directory **off** the credential database (email/username ≠ password hash).
 6. Edge IP rate limits. Library counters are per `client_id` only.
 7. Rotate PEM on a planned cadence; keep old public keys in JWKS until access tokens expire. Process restart currently reloads keys; there is no live in-process rotation API.
@@ -321,17 +321,17 @@ Do this in the executable (the IDP, if you run one), not in the library:
 | HTTP token surface | Pass for the limited grant set |
 | Store isolation | Pass (by construction + tests) |
 | HIBP helper | Pass for k-anonymity + logging (host still pins TLS) |
-| SQLite as universal store | Fail for `IdpClient` (F-10) |
+| SQLite as universal store | Fail for `OAuthClient` (F-10) |
 | Fit as IdentityServer replacement | **No** — and that is intentional |
-| Fit as a full IDP host | **No** — this is a library |
+| Fit as a full OAuth host | **No** — this is a library |
 
-**Security check: Failed.** Do not treat this library set as ASVS L2 complete. Crypto, JWT validation, NFC, strict scopes, client disable, and HIBP logging are in better shape than the previous evaluation. ROPC (F-01), farm refresh locking (F-02), missing IP anti-automation (F-03), bearer tokens (F-07), and SQLite `IdpClient` (F-10) keep the named security check **Failed**. Do not market it as OIDC. Do not call the package an IDP.
+**Security check: Failed.** Do not treat this library set as ASVS L2 complete. Crypto, JWT validation, NFC, strict scopes, client disable, and HIBP logging are in better shape than the previous evaluation. ROPC (F-01), farm refresh locking (F-02), missing IP anti-automation (F-03), bearer tokens (F-07), and SQLite `OAuthClient` (F-10) keep the named security check **Failed**. Do not market it as OIDC. Do not call the package an OAuth.
 
 Re-run:
 
 ```powershell
 dotnet test d:\novolis\novolis-security\tests\Novolis.Security.Unit\Novolis.Security.Unit.csproj -p:NovolisUseProjectReferences=true
-dotnet test d:\novolis\novolis-security\tests\Novolis.Security.Idp.Integration\Novolis.Security.Idp.Integration.csproj -p:NovolisUseProjectReferences=true
+dotnet test d:\novolis\novolis-security\tests\Novolis.Security.OAuth.Integration\Novolis.Security.OAuth.Integration.csproj -p:NovolisUseProjectReferences=true
 ```
 
 ## 12. References

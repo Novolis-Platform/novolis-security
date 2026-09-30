@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.OAuth.Storage</PackageId>
+    <Description>IRepository adapters for the limited Novolis OAuth stores.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.OAuth.Storage</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Novolis.Security.OAuth.Abstractions\Novolis.Security.OAuth.Abstractions.csproj" />
+    <LibraryReference Include="Novolis.Storage.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

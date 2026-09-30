@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Authentication.Abstractions</PackageId>
+    <Description>Global identity, credential, session, and authentication event contracts.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Authentication</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.OAuth.AspNetCore</PackageId>
+    <Description>ASP.NET Core token, revoke, JWKS, and discovery endpoints for the limited Novolis OAuth.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.OAuth.AspNetCore</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Novolis.Security.OAuth\Novolis.Security.OAuth.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+</Project>

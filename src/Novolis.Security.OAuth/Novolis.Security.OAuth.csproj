@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.OAuth</PackageId>
+    <Description>Standards-oriented OAuth authorization server with JWT access tokens and rotating refresh tokens.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.OAuth</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Novolis.Security.OAuth.Abstractions\Novolis.Security.OAuth.Abstractions.csproj" />
+    <ProjectReference Include="..\Novolis.Security.Cryptography\Novolis.Security.Cryptography.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+  </ItemGroup>
+</Project>

@@ -20,7 +20,7 @@ Published docs: [https://novolis-platform.github.io/.github/novolis-security/](h
 | `Novolis.Security.Cryptography` |
 | `Novolis.Security.Encryption` |
 | `Novolis.Security.HaveIBeenPwned` |
-| `Novolis.Security.Idp` / `.Abstractions` / `.AspNetCore` / `.Storage` |
+| `Novolis.Security.OAuth` / `.Abstractions` / `.AspNetCore` / `.Storage` |
 | `Novolis.Security.PasswordHashing` |
 | `Novolis.Security.Secrets` |
 | `Novolis.Security.SecureText` |

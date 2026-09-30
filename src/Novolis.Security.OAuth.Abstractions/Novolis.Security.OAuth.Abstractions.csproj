@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.OAuth.Abstractions</PackageId>
+    <Description>Standards-oriented OAuth contracts, token records, and atomic store interfaces.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.OAuth</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Novolis.Security.Authentication.Abstractions\Novolis.Security.Authentication.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

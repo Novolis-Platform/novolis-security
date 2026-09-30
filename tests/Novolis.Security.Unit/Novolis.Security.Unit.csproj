@@ -22,9 +22,9 @@
     <ProjectReference Include="..\..\src\Novolis.Security.Encryption\Novolis.Security.Encryption.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.HaveIBeenPwned\Novolis.Security.HaveIBeenPwned.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.SecureText\Novolis.Security.SecureText.csproj" />
-    <ProjectReference Include="..\..\src\Novolis.Security.Idp.Abstractions\Novolis.Security.Idp.Abstractions.csproj" />
-    <ProjectReference Include="..\..\src\Novolis.Security.Idp\Novolis.Security.Idp.csproj" />
-    <ProjectReference Include="..\..\src\Novolis.Security.Idp.AspNetCore\Novolis.Security.Idp.AspNetCore.csproj" />
-    <ProjectReference Include="..\..\src\Novolis.Security.Idp.Storage\Novolis.Security.Idp.Storage.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.OAuth.Abstractions\Novolis.Security.OAuth.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.OAuth\Novolis.Security.OAuth.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.OAuth.AspNetCore\Novolis.Security.OAuth.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.OAuth.Storage\Novolis.Security.OAuth.Storage.csproj" />
   </ItemGroup>
 </Project>
