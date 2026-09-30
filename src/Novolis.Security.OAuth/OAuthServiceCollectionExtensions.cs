@@ -44,7 +44,7 @@ public static class OAuthServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>Replaces the no-op event sink with a host delegate.</summary>
+    /// <summary>Replaces the default logger sink with a host delegate.</summary>
     public static IServiceCollection AddNovolisOAuthEvents(
         this IServiceCollection services,
         Func<SecurityEvent, CancellationToken, ValueTask> handler)

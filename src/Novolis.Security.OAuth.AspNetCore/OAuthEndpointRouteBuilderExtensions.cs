@@ -317,6 +317,8 @@ public static class OAuthEndpointRouteBuilderExtensions
             + "</form><script>document.forms[0].submit()</script></body></html>";
         return Results.Content(html, "text/html; charset=utf-8");
     }
+
+    static IResult RedirectOrError(
         HttpContext context,
         string redirectUri,
         string? state,
