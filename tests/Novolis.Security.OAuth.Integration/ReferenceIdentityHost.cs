@@ -2,6 +2,8 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Novolis.Security.Authentication;
+using Novolis.Security.Authentication.Storage;
+using Novolis.Security.Authorization.Storage;
 using Novolis.Security.OAuth;
 using Novolis.Security.OAuth.Storage;
 using Novolis.Security.PasswordHashing;
@@ -53,6 +55,17 @@ internal static class ReferenceIdentityHost
     {
         services.AddStorage(b => b.AddSqliteProvider(o => o.ConnectionString = connectionString));
         services.AddNovolisOAuthStorage();
+        return services;
+    }
+
+    /// <summary>
+    /// Replaces in-memory identity and authorization stores with the configured repository provider.
+    /// Call after <see cref="AddJsonStores"/> or <see cref="AddSqliteStores"/>, and after authorization services are registered.
+    /// </summary>
+    internal static IServiceCollection AddDurableIdentityStores(this IServiceCollection services)
+    {
+        services.AddNovolisAuthenticationStorage();
+        services.AddNovolisAuthorizationStorage();
         return services;
     }
 

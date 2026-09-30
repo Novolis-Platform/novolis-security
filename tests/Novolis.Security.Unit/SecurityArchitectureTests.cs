@@ -35,6 +35,13 @@ public class SecurityArchitectureTests
     }
 
     [Test]
+    public async Task AuthenticationAssembly_DoesNotReferenceBreachChecking()
+    {
+        var names = typeof(AuthenticationService).Assembly.GetReferencedAssemblies().Select(a => a.Name);
+        await Assert.That(names.Contains("Novolis.Security.HaveIBeenPwned")).IsFalse();
+    }
+
+    [Test]
     public async Task NoPublishedIdpPackageNamesRemainInSecurityAssemblies()
     {
         var assemblies = new[]
