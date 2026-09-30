@@ -20,4 +20,14 @@ public interface IAuthenticationSessionStore
         string sessionId,
         DateTimeOffset revokedUtc,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Revokes every live session for <paramref name="identityId"/>, optionally keeping
+    /// <paramref name="exceptSessionId"/> so a fresh sign-in can replace the previous session.
+    /// </summary>
+    ValueTask RevokeAllForIdentityAsync(
+        IdentityId identityId,
+        DateTimeOffset revokedUtc,
+        string? exceptSessionId = null,
+        CancellationToken cancellationToken = default);
 }

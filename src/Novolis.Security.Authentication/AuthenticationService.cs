@@ -1,15 +1,24 @@
 using Microsoft.Extensions.Options;
 using Novolis.Security.PasswordHashing;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Novolis.Security.Authentication;
 
 /// <summary>Default high-level authentication façade.</summary>
 public sealed class AuthenticationService : IAuthenticationService
 {
+    /// <summary>Library floor for <see cref="RegisterAsync"/>. Options cannot go below this.</summary>
+    public const int AbsoluteMinimumPasswordLength = 8;
+
     readonly IIdentityStore _identities;
     readonly ICredentialStore _credentials;
     readonly IAuthenticationSessionStore _sessions;
     readonly IAuthenticationEventSink _events;
+    readonly IPasswordBreachChecker? _breachChecker;
+    readonly IMfaProvider _mfa;
+    readonly ICacheStore _cache;
+    readonly IEnumerable<IIdentityRevocation> _revocations;
     readonly PasswordHasher _hasher;
     readonly AuthenticationOptions _options;
     readonly TimeProvider _time;
@@ -23,7 +32,11 @@ public sealed class AuthenticationService : IAuthenticationService
         IAuthenticationEventSink events,
         PasswordHasher hasher,
         IOptions<AuthenticationOptions> options,
-        TimeProvider time)
+        TimeProvider time,
+        ICacheStore cache,
+        IMfaProvider? mfa = null,
+        IPasswordBreachChecker? breachChecker = null,
+        IEnumerable<IIdentityRevocation>? revocations = null)
     {
         _identities = identities;
         _credentials = credentials;
@@ -32,6 +45,10 @@ public sealed class AuthenticationService : IAuthenticationService
         _hasher = hasher;
         _options = options.Value;
         _time = time;
+        _cache = cache;
+        _mfa = mfa ?? NoopMfaProvider.Instance;
+        _breachChecker = breachChecker;
+        _revocations = revocations ?? [];
         _dummyHash = hasher.HashPassword("novolis-authentication-timing-dummy");
     }
 
@@ -40,6 +57,7 @@ public sealed class AuthenticationService : IAuthenticationService
         string identifier,
         string password,
         bool createSession = true,
+        string? mfaProof = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(identifier);
@@ -52,10 +70,17 @@ public sealed class AuthenticationService : IAuthenticationService
             : await _credentials.TryGetAsync(identity.CredentialReference, cancellationToken)
                 .ConfigureAwait(false);
 
-        var hash = credential?.PasswordHash ?? _dummyHash;
+        var locked = credential is not null
+            && await IsLockedAsync(credential, cancellationToken).ConfigureAwait(false);
+        var hash = credential is null || locked ? _dummyHash : credential.PasswordHash;
         var passwordMatches = _hasher.CompareHashedPassword(hash, password);
-        if (identity is null || credential is null || identity.Disabled || credential.Disabled || !passwordMatches)
+        if (identity is null || credential is null || identity.Disabled || locked || !passwordMatches)
         {
+            if (credential is not null && identity is not null && !identity.Disabled && !locked)
+                await RecordFailureAsync(credential, identity.Id, cancellationToken).ConfigureAwait(false);
+            else if (credential is null)
+                await RecordUnknownFailureAsync(identifier, cancellationToken).ConfigureAwait(false);
+
             await ObserveAsync(
                 AuthenticationEventTypes.SignInFailed,
                 identity?.Id,
@@ -64,6 +89,198 @@ public sealed class AuthenticationService : IAuthenticationService
                 cancellationToken).ConfigureAwait(false);
             return SignInResult.Fail();
         }
+
+        return await FinishSignInAsync(
+            identity,
+            credential,
+            createSession,
+            requireMfa: true,
+            mfaProof,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<SignInResult> RegisterAsync(
+        string identifier,
+        string password,
+        string? displayName = null,
+        bool createSession = true,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+        ArgumentException.ThrowIfNullOrEmpty(password);
+
+        var minimum = Math.Max(_options.MinimumPasswordLength, AbsoluteMinimumPasswordLength);
+        if (password.Length < minimum)
+            return SignInResult.Fail("password_too_short");
+
+        if (_breachChecker is null)
+        {
+            if (!_options.IsDevelopment)
+                throw new InvalidOperationException(
+                    "IPasswordBreachChecker must be registered outside Development.");
+        }
+        else
+        {
+            bool breached;
+            try
+            {
+                breached = await _breachChecker.IsBreachedAsync(password, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                return SignInResult.Fail("password_check_unavailable");
+            }
+
+            if (breached)
+                return SignInResult.Fail("password_breached");
+        }
+
+        var existing = await _identities.FindByIdentifierAsync(identifier, cancellationToken)
+            .ConfigureAwait(false);
+        if (existing is not null)
+        {
+            await ObserveAsync(
+                AuthenticationEventTypes.SignInFailed,
+                existing.Id,
+                "identifier",
+                "identifier_in_use",
+                cancellationToken).ConfigureAwait(false);
+            return SignInResult.Fail("identifier_in_use");
+        }
+
+        var now = _time.GetUtcNow();
+        var reference = CredentialReference.New();
+        var credential = new CredentialRecord
+        {
+            StorageId = Guid.NewGuid(),
+            Reference = reference,
+            PasswordHash = _hasher.HashPassword(password),
+            CreatedUtc = now,
+            UpdatedUtc = now,
+        };
+        await _credentials.UpsertAsync(credential, cancellationToken).ConfigureAwait(false);
+
+        var identity = new IdentityRecord
+        {
+            Id = IdentityId.New(),
+            CredentialReference = reference,
+            Username = identifier.Contains('@', StringComparison.Ordinal) ? null : identifier,
+            Email = identifier.Contains('@', StringComparison.Ordinal) ? identifier : null,
+            DisplayName = displayName,
+            CreatedUtc = now,
+        };
+        await _identities.UpsertAsync(identity, cancellationToken).ConfigureAwait(false);
+        return await FinishSignInAsync(
+            identity,
+            credential,
+            createSession,
+            requireMfa: false,
+            mfaProof: null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask SignOutAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            return;
+
+        var session = await _sessions.TryGetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        var now = _time.GetUtcNow();
+        await _sessions.RevokeAsync(sessionId, now, cancellationToken).ConfigureAwait(false);
+        if (session is not null)
+            await NotifyRevocationAsync(session.IdentityId, now, cancellationToken).ConfigureAwait(false);
+        await ObserveAsync(
+            AuthenticationEventTypes.SessionRevoked,
+            session?.IdentityId,
+            null,
+            null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisableAsync(
+        IdentityId identityId,
+        CancellationToken cancellationToken = default)
+    {
+        var identity = await _identities.TryGetAsync(identityId, cancellationToken).ConfigureAwait(false);
+        if (identity is null)
+            return;
+
+        identity.Disabled = true;
+        await _identities.UpsertAsync(identity, cancellationToken).ConfigureAwait(false);
+        var now = _time.GetUtcNow();
+        await _sessions.RevokeAllForIdentityAsync(identityId, now, exceptSessionId: null, cancellationToken)
+            .ConfigureAwait(false);
+        await NotifyRevocationAsync(identityId, now, cancellationToken).ConfigureAwait(false);
+        await ObserveAsync(
+            AuthenticationEventTypes.IdentityDisabled,
+            identityId,
+            null,
+            null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask<IdentityId?> GetAuthenticatedIdentityAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            return null;
+
+        var session = await _sessions.TryGetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (session is null || !session.IsActive(_time.GetUtcNow()))
+            return null;
+
+        var identity = await _identities.TryGetAsync(session.IdentityId, cancellationToken).ConfigureAwait(false);
+        if (identity is { Disabled: true })
+            return null;
+
+        return session.IdentityId;
+    }
+
+    async ValueTask<SignInResult> FinishSignInAsync(
+        IdentityRecord identity,
+        CredentialRecord credential,
+        bool createSession,
+        bool requireMfa,
+        string? mfaProof,
+        CancellationToken cancellationToken)
+    {
+        if (requireMfa)
+        {
+            var mfa = await _mfa.CompleteAsync(
+                new MfaContext
+                {
+                    IdentityId = identity.Id,
+                    Credential = credential.Reference,
+                    Proof = mfaProof,
+                },
+                _cache,
+                cancellationToken).ConfigureAwait(false);
+            if (!mfa.Succeeded)
+            {
+                await RecordFailureAsync(credential, identity.Id, cancellationToken).ConfigureAwait(false);
+                await ObserveAsync(
+                    AuthenticationEventTypes.MfaFailed,
+                    identity.Id,
+                    "identifier",
+                    mfa.Error ?? "mfa_invalid",
+                    cancellationToken).ConfigureAwait(false);
+                return SignInResult.Fail(mfa.Error ?? "mfa_invalid");
+            }
+        }
+
+        await _cache.SetAsync(
+            FailureKey(credential.Reference),
+            0,
+            _options.SignInFailureWindow,
+            cancellationToken).ConfigureAwait(false);
 
         string? sessionId = null;
         if (createSession && _options.CreateSessionByDefault)
@@ -75,6 +292,11 @@ public sealed class AuthenticationService : IAuthenticationService
                 now + _options.SessionLifetime,
                 cancellationToken).ConfigureAwait(false);
             sessionId = session.SessionId;
+            await _sessions.RevokeAllForIdentityAsync(
+                identity.Id,
+                now,
+                session.SessionId,
+                cancellationToken).ConfigureAwait(false);
 
             await ObserveAsync(
                 AuthenticationEventTypes.SessionCreated,
@@ -93,86 +315,77 @@ public sealed class AuthenticationService : IAuthenticationService
         return SignInResult.Success(identity.Id, sessionId);
     }
 
-    /// <inheritdoc />
-    public async ValueTask<SignInResult> RegisterAsync(
-        string identifier,
-        string password,
-        string? displayName = null,
-        bool createSession = true,
-        CancellationToken cancellationToken = default)
+    async ValueTask<bool> IsLockedAsync(CredentialRecord credential, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
-        ArgumentException.ThrowIfNullOrEmpty(password);
-
-        var existing = await _identities.FindByIdentifierAsync(identifier, cancellationToken)
-            .ConfigureAwait(false);
-        if (existing is not null)
-        {
-            await ObserveAsync(
-                AuthenticationEventTypes.SignInFailed,
-                existing.Id,
-                "identifier",
-                "identifier_in_use",
-                cancellationToken).ConfigureAwait(false);
-            return SignInResult.Fail("identifier_in_use");
-        }
-
-        var now = _time.GetUtcNow();
-        var reference = CredentialReference.New();
-        await _credentials.UpsertAsync(
-            new CredentialRecord
-            {
-                StorageId = Guid.NewGuid(),
-                Reference = reference,
-                PasswordHash = _hasher.HashPassword(password),
-                CreatedUtc = now,
-                UpdatedUtc = now,
-            },
-            cancellationToken).ConfigureAwait(false);
-
-        var identity = new IdentityRecord
-        {
-            Id = IdentityId.New(),
-            CredentialReference = reference,
-            Username = identifier.Contains('@', StringComparison.Ordinal) ? null : identifier,
-            Email = identifier.Contains('@', StringComparison.Ordinal) ? identifier : null,
-            DisplayName = displayName,
-            CreatedUtc = now,
-        };
-        await _identities.UpsertAsync(identity, cancellationToken).ConfigureAwait(false);
-        return await SignInAsync(identifier, password, createSession, cancellationToken).ConfigureAwait(false);
+        if (credential.Disabled)
+            return true;
+        return await _cache.GetAsync(LockKey(credential.Reference), cancellationToken).ConfigureAwait(false) > 0;
     }
 
-    /// <inheritdoc />
-    public async ValueTask SignOutAsync(
-        string sessionId,
-        CancellationToken cancellationToken = default)
+    async ValueTask RecordFailureAsync(
+        CredentialRecord credential,
+        IdentityId identityId,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(sessionId))
+        var count = await _cache.IncrementAsync(
+            FailureKey(credential.Reference),
+            _options.SignInFailureWindow,
+            cancellationToken).ConfigureAwait(false);
+        if (count < _options.MaxSignInFailures)
             return;
 
-        var session = await _sessions.TryGetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        await _sessions.RevokeAsync(sessionId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        credential.Disabled = true;
+        credential.UpdatedUtc = _time.GetUtcNow();
+        await _credentials.UpsertAsync(credential, cancellationToken).ConfigureAwait(false);
+        await _cache.SetAsync(
+            LockKey(credential.Reference),
+            1,
+            _options.SignInFailureWindow,
+            cancellationToken).ConfigureAwait(false);
         await ObserveAsync(
-            AuthenticationEventTypes.SessionRevoked,
-            session?.IdentityId,
-            null,
-            null,
+            AuthenticationEventTypes.CredentialLocked,
+            identityId,
+            "identifier",
+            "credential_locked",
             cancellationToken).ConfigureAwait(false);
     }
 
-    /// <inheritdoc />
-    public async ValueTask<IdentityId?> GetAuthenticatedIdentityAsync(
-        string sessionId,
-        CancellationToken cancellationToken = default)
+    async ValueTask RecordUnknownFailureAsync(string identifier, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(sessionId))
-            return null;
+        await _cache.IncrementAsync(
+            UnknownFailureKey(identifier),
+            _options.SignInFailureWindow,
+            cancellationToken).ConfigureAwait(false);
+    }
 
-        var session = await _sessions.TryGetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        return session is not null && session.IsActive(_time.GetUtcNow())
-            ? session.IdentityId
-            : null;
+    static string FailureKey(CredentialReference reference) =>
+        "auth:fail:cred:" + reference;
+
+    static string LockKey(CredentialReference reference) =>
+        "auth:lock:cred:" + reference;
+
+    static string UnknownFailureKey(string identifier)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(identifier.Trim()));
+        return "auth:fail:id:" + Convert.ToHexString(hash);
+    }
+
+    async ValueTask NotifyRevocationAsync(
+        IdentityId identityId,
+        DateTimeOffset revokedUtc,
+        CancellationToken cancellationToken)
+    {
+        foreach (var revocation in _revocations)
+        {
+            try
+            {
+                await revocation.RevokeAsync(identityId, revokedUtc, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Revocation sinks must not roll back session state.
+            }
+        }
     }
 
     async ValueTask ObserveAsync(

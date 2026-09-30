@@ -100,39 +100,88 @@ public class OwaspHttpScenarioTests
     }
 
     [Test]
-    public async Task TokenAttempts_AreLimitedPerClientId()
+    public async Task TokenAttempts_AreLimitedPerClientId_AndPerIp()
     {
         await using var provider = OAuthTestHost.CreateProvider(o => o.TokenAttemptsPerWindow = 1);
         await OAuthTestHost.SeedConfidentialClientAsync(provider);
         await OAuthTestHost.SeedConfidentialClientAsync(provider, clientId: "second-client", secret: "other-secret");
+        await OAuthTestHost.SeedConfidentialClientAsync(provider, clientId: "third-client", secret: "third-secret");
         var tokens = provider.GetRequiredService<ITokenService>();
+        using var proofs = new DPoPProofFactory();
 
-        var first = await tokens.IssueAsync(new TokenIssueRequest
+        var first = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.ClientCredentials,
             ClientId = "space-game-web",
             ClientSecret = "client-secret",
             Scope = "game",
-        });
+            RemoteAddress = "203.0.113.10",
+        }));
         await Assert.That(first.Succeeded).IsTrue();
 
-        var limited = await tokens.IssueAsync(new TokenIssueRequest
+        var limited = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.ClientCredentials,
             ClientId = "space-game-web",
             ClientSecret = "client-secret",
             Scope = "game",
-        });
+            RemoteAddress = "203.0.113.10",
+        }));
         await Assert.That(limited.Error).IsEqualTo(OAuthTokenErrors.RateLimited);
 
-        var rotated = await tokens.IssueAsync(new TokenIssueRequest
+        var rotated = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.ClientCredentials,
             ClientId = "second-client",
             ClientSecret = "other-secret",
             Scope = "game",
+            RemoteAddress = "203.0.113.10",
+        }));
+        await Assert.That(rotated.Error).IsEqualTo(OAuthTokenErrors.RateLimited);
+
+        var otherIp = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.ClientCredentials,
+            ClientId = "third-client",
+            ClientSecret = "third-secret",
+            Scope = "game",
+            RemoteAddress = "203.0.113.11",
+        }));
+        await Assert.That(otherIp.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task Production_RejectsInMemoryStores()
+    {
+        await using var provider = OAuthTestHost.CreateProvider(o =>
+        {
+            o.IsDevelopment = false;
+            o.AllowEphemeralSigningKey = false;
+            o.AllowInMemoryStores = false;
         });
-        await Assert.That(rotated.Succeeded).IsTrue();
+        await Assert.That(() => provider.GetRequiredService<OAuthTokenService>()).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task DPoP_Mismatch_IsRejected()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var tokens = provider.GetRequiredService<OAuthTokenService>();
+        using var proofs = new DPoPProofFactory();
+        using var other = new DPoPProofFactory();
+        var issued = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.ClientCredentials,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            Scope = "game",
+        }));
+        await Assert.That(issued.Succeeded).IsTrue();
+        var mismatched = await tokens.ValidateAsync(issued.AccessToken!, other.Resource(issued.AccessToken!));
+        await Assert.That(mismatched.IsValid).IsFalse();
+        var missing = await tokens.ValidateAsync(issued.AccessToken!);
+        await Assert.That(missing.IsValid).IsFalse();
     }
 
     static HttpRequestMessage AuthorizedGet(string sessionId, string extraQuery)

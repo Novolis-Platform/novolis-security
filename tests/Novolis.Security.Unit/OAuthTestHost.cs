@@ -25,7 +25,8 @@ internal sealed class OAuthTestHost : IAsyncDisposable
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.WebHost.UseTestServer();
         builder.Services.Configure<PasswordHasherOptions>(FastArgon);
-        builder.Services.AddNovolisAuthentication();
+        builder.Services.AddSingleton<IPasswordBreachChecker>(_ => AllowingPasswordBreachChecker.Instance);
+        builder.Services.AddNovolisAuthentication(o => o.IsDevelopment = true);
         OAuthAspNetCoreServiceCollectionExtensions.AddNovolisOAuth(builder.Services, o =>
         {
             o.Issuer = new Uri("https://accounts.test");
@@ -45,7 +46,8 @@ internal sealed class OAuthTestHost : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.Configure<PasswordHasherOptions>(FastArgon);
-        services.AddNovolisAuthentication();
+        services.AddSingleton<IPasswordBreachChecker>(_ => AllowingPasswordBreachChecker.Instance);
+        services.AddNovolisAuthentication(o => o.IsDevelopment = true);
         OAuthServiceCollectionExtensions.AddNovolisOAuth(services, o =>
         {
             o.Issuer = new Uri("https://accounts.test");
@@ -115,7 +117,10 @@ internal sealed class OAuthTestHost : IAsyncDisposable
         return (result.IdentityId!.Value, result.SessionId!);
     }
 
-    public Task<HttpResponseMessage> PostTokenAsync(Dictionary<string, string> form, string? basic = null)
+    public Task<HttpResponseMessage> PostTokenAsync(
+        Dictionary<string, string> form,
+        string? basic = null,
+        string? dpop = null)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/oauth/token")
         {
@@ -123,6 +128,8 @@ internal sealed class OAuthTestHost : IAsyncDisposable
         };
         if (basic is not null)
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", basic);
+        if (dpop is not null)
+            request.Headers.TryAddWithoutValidation("DPoP", dpop);
         return Client.SendAsync(request);
     }
 

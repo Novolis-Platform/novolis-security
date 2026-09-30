@@ -40,4 +40,10 @@ public sealed class AuthorizationCodeRecord : Novolis.Storage.Abstractions.IHasI
 
     /// <summary>Set atomically when the code is redeemed.</summary>
     public DateTimeOffset? ConsumedUtc { get; set; }
+
+    /// <summary>Access-token jti issued when this code was redeemed.</summary>
+    public string? AccessTokenJti { get; set; }
+
+    /// <summary>Refresh family issued when this code was redeemed.</summary>
+    public Guid? RefreshFamilyId { get; set; }
 }

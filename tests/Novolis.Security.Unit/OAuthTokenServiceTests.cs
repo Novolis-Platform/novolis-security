@@ -13,6 +13,7 @@ namespace Novolis.Security.Tests;
 
 public class OAuthTokenServiceTests
 {
+    static readonly DPoPProofFactory Proofs = new();
     [Test]
     public async Task PasswordGrant_IsRejected()
     {
@@ -48,7 +49,7 @@ public class OAuthTokenServiceTests
         });
         await Assert.That(code.Succeeded).IsTrue();
 
-        var issued = await tokens.IssueAsync(new TokenIssueRequest
+        var issued = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.AuthorizationCode,
             ClientId = "space-game-web",
@@ -56,12 +57,12 @@ public class OAuthTokenServiceTests
             AuthorizationCode = code.Code,
             RedirectUri = "https://game.example/callback",
             CodeVerifier = verifier,
-        });
+        }));
         await Assert.That(issued.Succeeded).IsTrue();
         await Assert.That(issued.RefreshToken).IsNotNull();
         await Assert.That(issued.IdentityId).IsEqualTo(identityId);
 
-        var validated = await tokens.ValidateAsync(issued.AccessToken!);
+        var validated = await tokens.ValidateAsync(issued.AccessToken!, Proofs.Resource(issued.AccessToken!));
         await Assert.That(validated.IsValid).IsTrue();
         await Assert.That(validated.ClaimsIdentity?.FindFirst("sub")?.Value).IsEqualTo(identityId.ToString());
         await Assert.That(validated.ClaimsIdentity?.FindFirst("client_id")?.Value).IsEqualTo("space-game-web");
@@ -76,7 +77,7 @@ public class OAuthTokenServiceTests
         var tokens = provider.GetRequiredService<OAuthTokenService>();
         var (verifier, challenge) = CreatePkce();
         var code = await IssueCodeAsync(tokens, identityId, challenge);
-        var request = new TokenIssueRequest
+        var request = Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.AuthorizationCode,
             ClientId = "space-game-web",
@@ -84,9 +85,21 @@ public class OAuthTokenServiceTests
             AuthorizationCode = code,
             RedirectUri = "https://game.example/callback",
             CodeVerifier = verifier,
-        };
-        await Assert.That((await tokens.IssueAsync(request)).Succeeded).IsTrue();
-        await Assert.That((await tokens.IssueAsync(request)).Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
+        });
+        var first = await tokens.IssueAsync(request);
+        await Assert.That(first.Succeeded).IsTrue();
+        var replay = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.AuthorizationCode,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            AuthorizationCode = code,
+            RedirectUri = "https://game.example/callback",
+            CodeVerifier = verifier,
+        }));
+        await Assert.That(replay.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
+        await Assert.That((await tokens.ValidateAsync(first.AccessToken!, Proofs.Resource(first.AccessToken!))).IsValid)
+            .IsFalse();
     }
 
     [Test]
@@ -98,7 +111,7 @@ public class OAuthTokenServiceTests
         var tokens = provider.GetRequiredService<OAuthTokenService>();
         var (verifier, challenge) = CreatePkce();
         var code = await IssueCodeAsync(tokens, identityId, challenge);
-        var wrongVerifier = await tokens.IssueAsync(new TokenIssueRequest
+        var wrongVerifier = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.AuthorizationCode,
             ClientId = "space-game-web",
@@ -106,7 +119,7 @@ public class OAuthTokenServiceTests
             AuthorizationCode = code,
             RedirectUri = "https://game.example/callback",
             CodeVerifier = "wrong-verifier-value-that-is-long-enough",
-        });
+        }));
         await Assert.That(wrongVerifier.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
     }
 
@@ -119,32 +132,32 @@ public class OAuthTokenServiceTests
         var tokens = provider.GetRequiredService<ITokenService>();
         var first = await RedeemAsync(provider, tokens, identityId);
 
-        var rotated = await tokens.IssueAsync(new TokenIssueRequest
+        var rotated = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
             ClientId = "space-game-web",
             ClientSecret = "client-secret",
             RefreshToken = first.RefreshToken,
-        });
+        }));
         await Assert.That(rotated.Succeeded).IsTrue();
         await Assert.That(rotated.RefreshToken)!.IsNotEqualTo(first.RefreshToken);
 
-        var replay = await tokens.IssueAsync(new TokenIssueRequest
+        var replay = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
             ClientId = "space-game-web",
             ClientSecret = "client-secret",
             RefreshToken = first.RefreshToken,
-        });
+        }));
         await Assert.That(replay.Succeeded).IsFalse();
 
-        var afterReuse = await tokens.IssueAsync(new TokenIssueRequest
+        var afterReuse = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
             ClientId = "space-game-web",
             ClientSecret = "client-secret",
             RefreshToken = rotated.RefreshToken,
-        });
+        }));
         await Assert.That(afterReuse.Succeeded).IsFalse();
     }
 
@@ -157,24 +170,24 @@ public class OAuthTokenServiceTests
         var tokens = provider.GetRequiredService<ITokenService>();
         var first = await RedeemAsync(provider, tokens, identityId, scope: "game");
 
-        var escalatedScope = await tokens.IssueAsync(new TokenIssueRequest
+        var escalatedScope = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
             ClientId = "space-game-web",
             ClientSecret = "client-secret",
             RefreshToken = first.RefreshToken,
             Scope = "game profile",
-        });
+        }));
         await Assert.That(escalatedScope.Error).IsEqualTo(OAuthTokenErrors.InvalidScope);
 
-        var escalatedAudience = await tokens.IssueAsync(new TokenIssueRequest
+        var escalatedAudience = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
             ClientId = "space-game-web",
             ClientSecret = "client-secret",
             RefreshToken = first.RefreshToken,
             Audience = "farming-api",
-        });
+        }));
         await Assert.That(escalatedAudience.Error).IsEqualTo(OAuthTokenErrors.InvalidScope);
     }
 
@@ -186,22 +199,22 @@ public class OAuthTokenServiceTests
         await OAuthTestHost.SeedPublicClientAsync(provider);
         var tokens = provider.GetRequiredService<OAuthTokenService>();
 
-        var issued = await tokens.IssueAsync(new TokenIssueRequest
+        var issued = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.ClientCredentials,
             ClientId = "space-game-web",
             ClientSecret = "client-secret",
             Scope = "game",
-        });
+        }));
         await Assert.That(issued.Succeeded).IsTrue();
         await Assert.That(issued.RefreshToken).IsNull();
         await Assert.That(issued.IdentityId).IsNull();
 
-        var denied = await tokens.IssueAsync(new TokenIssueRequest
+        var denied = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.ClientCredentials,
             ClientId = "space-game-launcher",
-        });
+        }));
         await Assert.That(denied.Error).IsEqualTo(OAuthTokenErrors.UnauthorizedClient);
     }
 
@@ -245,6 +258,25 @@ public class OAuthTokenServiceTests
         await Assert.That(invalid.IsValid).IsFalse();
     }
 
+    [Test]
+    public async Task Refresh_FamilyCap_IsAbsolute()
+    {
+        await using var provider = OAuthTestHost.CreateProvider(o => o.RefreshTokenLifetime = TimeSpan.FromMilliseconds(1));
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var (identityId, _) = await OAuthTestHost.SeedIdentityAsync(provider);
+        var tokens = provider.GetRequiredService<ITokenService>();
+        var first = await RedeemAsync(provider, tokens, identityId);
+        await Task.Delay(30);
+        var expired = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.RefreshToken,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            RefreshToken = first.RefreshToken,
+        }));
+        await Assert.That(expired.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
+    }
+
     static async Task<string> IssueCodeAsync(OAuthTokenService tokens, IdentityId identityId, string challenge)
     {
         var issued = await tokens.IssueAuthorizationCodeAsync(new AuthorizationCodeIssueRequest
@@ -269,7 +301,7 @@ public class OAuthTokenServiceTests
         var oauth = services.GetRequiredService<OAuthTokenService>();
         var (verifier, challenge) = CreatePkce();
         var code = await IssueCodeAsync(oauth, identityId, challenge);
-        return await tokens.IssueAsync(new TokenIssueRequest
+        return await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.AuthorizationCode,
             ClientId = "space-game-web",
@@ -278,7 +310,7 @@ public class OAuthTokenServiceTests
             RedirectUri = "https://game.example/callback",
             CodeVerifier = verifier,
             Scope = scope,
-        });
+        }));
     }
 
     static (string Verifier, string Challenge) CreatePkce()

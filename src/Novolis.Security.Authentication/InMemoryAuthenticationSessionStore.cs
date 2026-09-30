@@ -50,4 +50,24 @@ public sealed class InMemoryAuthenticationSessionStore : IAuthenticationSessionS
             session.RevokedUtc = revokedUtc;
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc />
+    public ValueTask RevokeAllForIdentityAsync(
+        IdentityId identityId,
+        DateTimeOffset revokedUtc,
+        string? exceptSessionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var session in _sessions.Values)
+        {
+            if (session.IdentityId != identityId || session.RevokedUtc is not null)
+                continue;
+            if (exceptSessionId is not null
+                && string.Equals(session.SessionId, exceptSessionId, StringComparison.Ordinal))
+                continue;
+            session.RevokedUtc = revokedUtc;
+        }
+
+        return ValueTask.CompletedTask;
+    }
 }

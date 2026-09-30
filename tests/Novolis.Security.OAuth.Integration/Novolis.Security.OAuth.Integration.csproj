@@ -10,6 +10,7 @@
     <LibraryReference Include="Novolis.Storage.Abstractions" />
     <LibraryReference Include="Novolis.Storage.Json" />
     <LibraryReference Include="Novolis.Storage.Sqlite" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
     <PackageReference Include="TUnit" />
   </ItemGroup>
   <ItemGroup>

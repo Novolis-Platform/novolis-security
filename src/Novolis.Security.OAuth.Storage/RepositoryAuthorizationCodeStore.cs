@@ -33,7 +33,7 @@ public sealed class RepositoryAuthorizationCodeStore(IRepository<StoredAuthoriza
             if (row is null)
                 return ValueTask.FromResult(AuthorizationCodeConsumeResult.Failure());
             if (row.ConsumedUtc is not null)
-                return ValueTask.FromResult(AuthorizationCodeConsumeResult.Failure(replayed: true));
+                return ValueTask.FromResult(AuthorizationCodeConsumeResult.Failure(replayed: true, OAuthStorageMapper.ToCode(row)));
             if (row.ExpiresUtc <= now
                 || !HashesEqual(row.SecretHash, secretHash)
                 || !string.Equals(row.ClientId, clientId, StringComparison.Ordinal)

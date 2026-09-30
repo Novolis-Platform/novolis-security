@@ -46,6 +46,9 @@ internal static class OAuthStorageMapper
         ExpiresUtc = token.ExpiresUtc,
         RevokedUtc = token.RevokedUtc,
         ReplacedById = token.ReplacedById,
+        FamilyExpiresUtc = token.FamilyExpiresUtc,
+        CnfJkt = token.CnfJkt,
+        CnfX5tS256 = token.CnfX5tS256,
     };
 
     public static RefreshTokenRecord ToRefresh(StoredRefreshToken row) => new()
@@ -62,6 +65,9 @@ internal static class OAuthStorageMapper
         ExpiresUtc = row.ExpiresUtc,
         RevokedUtc = row.RevokedUtc,
         ReplacedById = row.ReplacedById,
+        FamilyExpiresUtc = row.FamilyExpiresUtc,
+        CnfJkt = row.CnfJkt,
+        CnfX5tS256 = row.CnfX5tS256,
     };
 
     public static StoredAuthorizationCode ToStored(AuthorizationCodeRecord code) => new()
@@ -78,6 +84,8 @@ internal static class OAuthStorageMapper
         IssuedUtc = code.IssuedUtc,
         ExpiresUtc = code.ExpiresUtc,
         ConsumedUtc = code.ConsumedUtc,
+        AccessTokenJti = code.AccessTokenJti,
+        RefreshFamilyId = code.RefreshFamilyId,
     };
 
     public static AuthorizationCodeRecord ToCode(StoredAuthorizationCode row) => new()
@@ -94,6 +102,8 @@ internal static class OAuthStorageMapper
         IssuedUtc = row.IssuedUtc,
         ExpiresUtc = row.ExpiresUtc,
         ConsumedUtc = row.ConsumedUtc,
+        AccessTokenJti = row.AccessTokenJti,
+        RefreshFamilyId = row.RefreshFamilyId,
     };
 
     public static StoredSigningKey ToStored(SigningKeyRecord key) => new()

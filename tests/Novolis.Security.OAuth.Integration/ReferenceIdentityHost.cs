@@ -27,7 +27,8 @@ internal static class ReferenceIdentityHost
         services.AddLogging();
         services.Configure<PasswordHasherOptions>(FastArgon);
         services.AddMemoryCache();
-        services.AddNovolisAuthentication();
+        services.AddSingleton<IPasswordBreachChecker>(_ => AllowingPasswordBreachChecker.Instance);
+        services.AddNovolisAuthentication(o => o.IsDevelopment = true);
         services.AddNovolisOAuth(o =>
         {
             o.Issuer = new Uri("https://accounts.test");

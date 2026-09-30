@@ -27,6 +27,8 @@ public static class AuthenticationServiceCollectionExtensions
         services.TryAddSingleton<IIdentityStore, InMemoryIdentityStore>();
         services.TryAddSingleton<ICredentialStore, InMemoryCredentialStore>();
         services.TryAddSingleton<IAuthenticationSessionStore, InMemoryAuthenticationSessionStore>();
+        services.TryAddSingleton<ICacheStore>(sp => new InMemoryCacheStore(sp.GetRequiredService<TimeProvider>()));
+        services.TryAddSingleton<IMfaProvider>(_ => NoopMfaProvider.Instance);
         services.TryAddSingleton<IAuthenticationEventSink>(_ => NoopAuthenticationEventSink.Instance);
         services.TryAddSingleton<AuthenticationService>();
         services.TryAddSingleton<IAuthenticationService>(sp =>

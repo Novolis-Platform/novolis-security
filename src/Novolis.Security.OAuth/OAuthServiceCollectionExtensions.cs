@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Novolis.Security.Authentication;
 
 namespace Novolis.Security.OAuth;
 
@@ -25,11 +26,23 @@ public static class OAuthServiceCollectionExtensions
         services.TryAddSingleton<IRefreshTokenStore, InMemoryRefreshTokenStore>();
         services.TryAddSingleton<ISigningKeyStore, InMemorySigningKeyStore>();
         services.TryAddSingleton<IKeyStore>(sp => sp.GetRequiredService<ISigningKeyStore>());
-        services.TryAddSingleton<ICacheStore, InMemoryCacheStore>();
+        services.TryAddSingleton<ICacheStore>(sp => new InMemoryCacheStore(sp.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<IEventStore>(_ => NoopEventStore.Instance);
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IIdentityRevocation, IdentityOAuthRevocation>());
         services.TryAddSingleton<SigningKeyRing>();
         services.TryAddSingleton<OAuthTokenService>();
         services.TryAddSingleton<ITokenService>(sp => sp.GetRequiredService<OAuthTokenService>());
+        return services;
+    }
+
+    /// <summary>Replaces the no-op event sink with a host delegate.</summary>
+    public static IServiceCollection AddNovolisOAuthEvents(
+        this IServiceCollection services,
+        Func<SecurityEvent, CancellationToken, ValueTask> handler)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(handler);
+        services.Replace(ServiceDescriptor.Singleton<IEventStore>(_ => new DelegateEventStore(handler)));
         return services;
     }
 }

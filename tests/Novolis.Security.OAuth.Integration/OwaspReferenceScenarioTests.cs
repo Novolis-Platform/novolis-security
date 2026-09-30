@@ -31,7 +31,11 @@ public class OwaspReferenceScenarioTests
         try
         {
             var services = new ServiceCollection();
-            services.AddReferenceIdentity();
+            services.AddReferenceIdentity(o =>
+            {
+                o.Audiences.Clear();
+                o.Audiences.Add("space-game-api");
+            });
             services.AddNovolisAuthorization();
             services.AddPermission<Play>();
             services.AddBuiltInRole<Player>();
@@ -54,7 +58,11 @@ public class OwaspReferenceScenarioTests
         try
         {
             var services = new ServiceCollection();
-            services.AddReferenceIdentity();
+            services.AddReferenceIdentity(o =>
+            {
+                o.Audiences.Clear();
+                o.Audiences.Add("space-game-api");
+            });
             services.AddNovolisAuthorization();
             services.AddPermission<Play>();
             services.AddBuiltInRole<Player>();
@@ -72,53 +80,57 @@ public class OwaspReferenceScenarioTests
     static async Task RunScenarioAsync(ServiceProvider provider, string? jsonRoot)
     {
         await SeedClientsAsync(provider);
+        using var proofs = new DPoPProofFactory();
         var authentication = provider.GetRequiredService<IAuthenticationService>();
-        var identities = provider.GetRequiredService<IIdentityStore>();
         var tokens = provider.GetRequiredService<OAuthTokenService>();
 
         var registered = await authentication.RegisterAsync(Email, Password);
         await Assert.That(registered.Succeeded).IsTrue();
         var identityId = registered.IdentityId!.Value;
         var firstSession = registered.SessionId!;
+        await Assert.That(FromBase64Url(firstSession).Length).IsEqualTo(32);
 
         await AssertStoredIsolationAsync(provider, identityId, jsonRoot);
 
         var shortPassword = await authentication.RegisterAsync("short-user", "x", createSession: false);
-        await Assert.That(shortPassword.Succeeded).IsTrue();
+        await Assert.That(shortPassword.Succeeded).IsFalse();
+        await Assert.That(shortPassword.Error).IsEqualTo("password_too_short");
 
         var second = await authentication.SignInAsync(Email, Password);
         await Assert.That(second.SessionId).IsNotEqualTo(firstSession);
-        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(firstSession)).IsEqualTo(identityId);
+        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(firstSession)).IsNull();
         await authentication.SignOutAsync(second.SessionId!);
         await Assert.That(await authentication.GetAuthenticatedIdentityAsync(second.SessionId!)).IsNull();
-        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(firstSession)).IsEqualTo(identityId);
+        await Task.Delay(1100);
 
         var (verifier, challenge) = CreatePkce();
         var code = await tokens.IssueAuthorizationCodeAsync(CodeRequest(ConfidentialId, identityId, challenge, "S256"));
         await Assert.That(code.Succeeded).IsTrue();
 
-        var issued = await tokens.IssueAsync(Redeem(ConfidentialId, ClientSecret, code.Code!, verifier, RedirectUri));
+        var issued = await tokens.IssueAsync(proofs.Bind(Redeem(ConfidentialId, ClientSecret, code.Code!, verifier, RedirectUri)));
         await Assert.That(issued.Succeeded).IsTrue();
         await Assert.That(issued.TokenType).IsEqualTo("Bearer");
         await Assert.That(issued.RefreshToken).IsNotNull();
         await Assert.That(issued.IdentityId).IsEqualTo(identityId);
         AssertAccessTokenClaims(issued.AccessToken!, identityId);
 
-        var validated = await tokens.ValidateAsync(issued.AccessToken!);
+        var validated = await tokens.ValidateAsync(issued.AccessToken!, proofs.Resource(issued.AccessToken!));
         await Assert.That(validated.IsValid).IsTrue();
 
-        var replay = await tokens.IssueAsync(Redeem(ConfidentialId, ClientSecret, code.Code!, verifier, RedirectUri));
+        var replay = await tokens.IssueAsync(proofs.Bind(Redeem(ConfidentialId, ClientSecret, code.Code!, verifier, RedirectUri)));
         await Assert.That(replay.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
+        await Assert.That((await tokens.ValidateAsync(issued.AccessToken!, proofs.Resource(issued.AccessToken!))).IsValid)
+            .IsFalse();
 
         var (verifier2, challenge2) = CreatePkce();
         var code2 = await tokens.IssueAuthorizationCodeAsync(CodeRequest(ConfidentialId, identityId, challenge2, "S256"));
-        var wrongRedirect = await tokens.IssueAsync(Redeem(
-            ConfidentialId, ClientSecret, code2.Code!, verifier2, RedirectUri + "/extra"));
+        var wrongRedirect = await tokens.IssueAsync(proofs.Bind(Redeem(
+            ConfidentialId, ClientSecret, code2.Code!, verifier2, RedirectUri + "/extra")));
         await Assert.That(wrongRedirect.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
 
         var (verifier3, challenge3) = CreatePkce();
         var bound = await tokens.IssueAuthorizationCodeAsync(CodeRequest(ConfidentialId, identityId, challenge3, "S256"));
-        var otherClient = await tokens.IssueAsync(Redeem(OtherClientId, ClientSecret, bound.Code!, verifier3, RedirectUri));
+        var otherClient = await tokens.IssueAsync(proofs.Bind(Redeem(OtherClientId, ClientSecret, bound.Code!, verifier3, RedirectUri)));
         await Assert.That(otherClient.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
 
         var openRedirect = await tokens.IssueAuthorizationCodeAsync(new AuthorizationCodeIssueRequest
@@ -159,76 +171,78 @@ public class OwaspReferenceScenarioTests
             await Assert.That(denied.Error).IsEqualTo(OAuthTokenErrors.UnsupportedGrantType);
         }
 
-        var publicCredentials = await tokens.IssueAsync(new TokenIssueRequest
+        var publicCredentials = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.ClientCredentials,
             ClientId = PublicClientId,
-        });
+        }));
         await Assert.That(publicCredentials.Error).IsEqualTo(OAuthTokenErrors.UnauthorizedClient);
 
         var (publicVerifier, publicChallenge) = CreatePkce();
         var publicCode = await tokens.IssueAuthorizationCodeAsync(
             CodeRequest(PublicClientId, identityId, publicChallenge, "S256", "https://launcher.example/callback"));
         await Assert.That(publicCode.Succeeded).IsTrue();
-        var publicTokens = await tokens.IssueAsync(Redeem(
-            PublicClientId, clientSecret: null, publicCode.Code!, publicVerifier, "https://launcher.example/callback"));
+        var publicTokens = await tokens.IssueAsync(proofs.Bind(Redeem(
+            PublicClientId, clientSecret: null, publicCode.Code!, publicVerifier, "https://launcher.example/callback")));
         await Assert.That(publicTokens.Succeeded).IsTrue();
-        var publicWithSecret = await tokens.IssueAsync(new TokenIssueRequest
+        var publicWithSecret = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.ClientCredentials,
             ClientId = PublicClientId,
             ClientSecret = "not-a-secret",
-        });
+        }));
         await Assert.That(publicWithSecret.Error).IsEqualTo(OAuthTokenErrors.InvalidClient);
 
-        var elevated = await tokens.IssueAsync(new TokenIssueRequest
+        var live = await IssueLiveTokensAsync(tokens, proofs, identityId);
+        var elevated = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
             ClientId = ConfidentialId,
             ClientSecret = ClientSecret,
-            RefreshToken = issued.RefreshToken,
+            RefreshToken = live.RefreshToken,
             Scope = "game admin",
-        });
+        }));
         await Assert.That(elevated.Error).IsEqualTo(OAuthTokenErrors.InvalidScope);
 
-        var refreshed = await tokens.IssueAsync(new TokenIssueRequest
+        var refreshed = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
             ClientId = ConfidentialId,
             ClientSecret = ClientSecret,
-            RefreshToken = issued.RefreshToken,
-        });
+            RefreshToken = live.RefreshToken,
+        }));
         await Assert.That(refreshed.Succeeded).IsTrue();
-        var reuse = await tokens.IssueAsync(new TokenIssueRequest
+        var reuse = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
             ClientId = ConfidentialId,
             ClientSecret = ClientSecret,
-            RefreshToken = issued.RefreshToken,
-        });
+            RefreshToken = live.RefreshToken,
+        }));
         await Assert.That(reuse.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
-        var family = await tokens.IssueAsync(new TokenIssueRequest
+        var family = await tokens.IssueAsync(proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.RefreshToken,
             ClientId = ConfidentialId,
             ClientSecret = ClientSecret,
             RefreshToken = refreshed.RefreshToken,
-        });
+        }));
         await Assert.That(family.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
 
-        await authentication.SignOutAsync(firstSession);
-        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(firstSession)).IsNull();
-        await Assert.That((await tokens.ValidateAsync(issued.AccessToken!)).IsValid).IsTrue();
+        var afterSignIn = await authentication.SignInAsync(Email, Password);
+        var fresh = await IssueLiveTokensAsync(tokens, proofs, identityId);
+        await authentication.SignOutAsync(afterSignIn.SessionId!);
+        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(afterSignIn.SessionId!)).IsNull();
+        await Assert.That((await tokens.ValidateAsync(fresh.AccessToken!, proofs.Resource(fresh.AccessToken!))).IsValid)
+            .IsFalse();
 
-        var directory = await identities.TryGetAsync(identityId);
-        directory!.Disabled = true;
-        await identities.UpsertAsync(directory);
+        await authentication.DisableAsync(identityId);
         await Assert.That((await authentication.SignInAsync(Email, Password, createSession: false)).Succeeded).IsFalse();
 
         var (verifier4, challenge4) = CreatePkce();
         var disabledCode = await tokens.IssueAuthorizationCodeAsync(CodeRequest(ConfidentialId, identityId, challenge4, "S256"));
         await Assert.That(disabledCode.Succeeded).IsTrue();
-        var disabledRedeem = await tokens.IssueAsync(Redeem(ConfidentialId, ClientSecret, disabledCode.Code!, verifier4, RedirectUri));
+        var disabledRedeem = await tokens.IssueAsync(proofs.Bind(Redeem(ConfidentialId, ClientSecret, disabledCode.Code!, verifier4, RedirectUri)));
         await Assert.That(disabledRedeem.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
 
         var authz = provider.GetRequiredService<IAuthorizationService>();
@@ -239,9 +253,19 @@ public class OwaspReferenceScenarioTests
         await provider.GetRequiredService<IRoleAssignmentStore>()
             .AssignIdentityAsync(new IdentityRoleAssignment(tenant, identityId, AuthorizationIds.Role<Player>()));
         await Assert.That((await authz.AuthorizeAsync(identityId, tenant, AuthorizationIds.Permission<Play>())).Succeeded)
-            .IsTrue();
+            .IsFalse();
         await Assert.That((await authz.AuthorizeAsync(identityId, otherTenant, AuthorizationIds.Permission<Play>())).Succeeded)
             .IsFalse();
+    }
+
+    static async Task<TokenIssueResult> IssueLiveTokensAsync(
+        OAuthTokenService tokens,
+        DPoPProofFactory proofs,
+        IdentityId identityId)
+    {
+        var (verifier, challenge) = CreatePkce();
+        var code = await tokens.IssueAuthorizationCodeAsync(CodeRequest(ConfidentialId, identityId, challenge, "S256"));
+        return await tokens.IssueAsync(proofs.Bind(Redeem(ConfidentialId, ClientSecret, code.Code!, verifier, RedirectUri)));
     }
 
     static async Task AssertStoredIsolationAsync(ServiceProvider provider, IdentityId identityId, string? jsonRoot)
@@ -344,8 +368,8 @@ public class OwaspReferenceScenarioTests
             throw new InvalidOperationException("Access token subject is not the identity id.");
         if (payload.Contains(Email, StringComparison.Ordinal) || payload.Contains("password", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Access token carries a login identifier or password.");
-        if (payload.Contains("\"cnf\"", StringComparison.Ordinal))
-            throw new InvalidOperationException("Access token is sender-constrained.");
+        if (!payload.Contains("\"jkt\"", StringComparison.Ordinal) && !payload.Contains("x5t", StringComparison.Ordinal))
+            throw new InvalidOperationException("Access token is not sender-constrained.");
     }
 
     static (string Verifier, string Challenge) CreatePkce()

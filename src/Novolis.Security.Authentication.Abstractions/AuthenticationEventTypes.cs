@@ -12,9 +12,18 @@ public static class AuthenticationEventTypes
     /// <summary>A credential was disabled.</summary>
     public const string CredentialDisabled = "credential_disabled";
 
+    /// <summary>A second factor was required or rejected.</summary>
+    public const string MfaFailed = "mfa_failed";
+
+    /// <summary>A credential was locked after too many failed sign-in attempts.</summary>
+    public const string CredentialLocked = "credential_locked";
+
     /// <summary>A browser session was created.</summary>
     public const string SessionCreated = "session_created";
 
     /// <summary>A browser session was revoked.</summary>
     public const string SessionRevoked = "session_revoked";
+
+    /// <summary>An identity was disabled.</summary>
+    public const string IdentityDisabled = "identity_disabled";
 }

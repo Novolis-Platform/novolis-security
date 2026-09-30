@@ -6,11 +6,13 @@ public interface IAuthenticationService
     /// <summary>
     /// Resolves an identifier through the identity directory and verifies its credential.
     /// This is not an OAuth Resource Owner Password Credentials grant.
+    /// After a correct password, <see cref="IMfaProvider"/> runs; pass <paramref name="mfaProof"/> when the product requires a second factor.
     /// </summary>
     ValueTask<SignInResult> SignInAsync(
         string identifier,
         string password,
         bool createSession = true,
+        string? mfaProof = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Validates a browser session without guessing a tenant.</summary>
@@ -26,8 +28,15 @@ public interface IAuthenticationService
         bool createSession = true,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Revokes a browser authentication session.</summary>
+    /// <summary>Revokes a browser authentication session and notifies revocation sinks.</summary>
     ValueTask SignOutAsync(
         string sessionId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Disables the identity, revokes every browser session, and notifies revocation sinks.
+    /// </summary>
+    ValueTask DisableAsync(
+        IdentityId identityId,
         CancellationToken cancellationToken = default);
 }

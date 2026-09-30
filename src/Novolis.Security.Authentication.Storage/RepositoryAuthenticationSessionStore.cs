@@ -53,6 +53,23 @@ public sealed class RepositoryAuthenticationSessionStore(IRepository<StoredAuthe
         await repository.UpsertAsync(match, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public async ValueTask RevokeAllForIdentityAsync(
+        IdentityId identityId,
+        DateTimeOffset revokedUtc,
+        string? exceptSessionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var row in repository.All().Where(item => item.IdentityId == identityId.Value && item.RevokedUtc is null))
+        {
+            if (exceptSessionId is not null
+                && string.Equals(row.SessionId, exceptSessionId, StringComparison.Ordinal))
+                continue;
+            row.RevokedUtc = revokedUtc;
+            await repository.UpsertAsync(row, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     static AuthenticationSession ToSession(StoredAuthenticationSession row) => new()
     {
         SessionId = row.SessionId,

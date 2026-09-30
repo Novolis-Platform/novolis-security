@@ -40,4 +40,13 @@ public sealed class RefreshTokenRecord : Novolis.Storage.Abstractions.IHasId
 
     /// <summary>Replacement token id after rotation.</summary>
     public Guid? ReplacedById { get; set; }
+
+    /// <summary>Absolute expiry of the rotation family. Copied on every rotation and never extended.</summary>
+    public DateTimeOffset FamilyExpiresUtc { get; set; }
+
+    /// <summary>DPoP JWK thumbprint bound to this family, when issued with DPoP.</summary>
+    public string? CnfJkt { get; set; }
+
+    /// <summary>Certificate thumbprint bound to this family, when issued with mTLS.</summary>
+    public string? CnfX5tS256 { get; set; }
 }

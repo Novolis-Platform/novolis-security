@@ -1,3 +1,4 @@
+using Novolis.Security.Authentication;
 using Novolis.Storage.Abstractions;
 
 namespace Novolis.Security.OAuth.Storage;
@@ -26,6 +27,18 @@ public sealed class RepositoryRefreshTokenStore(IRepository<StoredRefreshToken> 
     {
         IReadOnlyList<RefreshTokenRecord> matches = repository.All()
             .Where(t => t.FamilyId == familyId)
+            .Select(OAuthStorageMapper.ToRefresh)
+            .ToArray();
+        return ValueTask.FromResult(matches);
+    }
+
+    /// <inheritdoc />
+    public ValueTask<IReadOnlyList<RefreshTokenRecord>> FindByIdentityIdAsync(
+        IdentityId identityId,
+        CancellationToken ct = default)
+    {
+        IReadOnlyList<RefreshTokenRecord> matches = repository.All()
+            .Where(t => t.IdentityId == identityId.Value)
             .Select(OAuthStorageMapper.ToRefresh)
             .ToArray();
         return ValueTask.FromResult(matches);

@@ -43,6 +43,10 @@ The credential vault is not a user directory.
 
 `IdentityId` is the JWT subject. `CredentialReference` never becomes a public identifier.
 
+`ICacheStore` is the product cache: in-memory for tests and a single process, replaced with a distributed store when more than one process shares lockout, MFA, or OAuth leases.
+
+`IMfaProvider` is a product second factor. The library default is `NoopMfaProvider`.
+
 ## Authorization
 
 Authorization is tenant-scoped. Groups contain identities. Roles contain permissions. Composite roles contain roles and must remain acyclic.

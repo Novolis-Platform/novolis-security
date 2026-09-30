@@ -12,7 +12,8 @@ public sealed class AuthorizationService(
     EffectiveAuthorizationCache cache,
     IAuthorizationEventSink events,
     TimeProvider time,
-    IServiceProvider services) : IAuthorizationService
+    IServiceProvider services,
+    IIdentityStore? identities = null) : IAuthorizationService
 {
     /// <inheritdoc />
     public async ValueTask<AuthorizationDecision> AuthorizeAsync(
@@ -21,6 +22,9 @@ public sealed class AuthorizationService(
         PermissionId permission,
         CancellationToken cancellationToken = default)
     {
+        if (await IsDisabledAsync(identityId, cancellationToken).ConfigureAwait(false))
+            return AuthorizationDecision.Deny("identity_disabled");
+
         var effective = await EvaluateAsync(identityId, tenantId, cancellationToken).ConfigureAwait(false);
         if (effective.Permissions.Contains(permission))
             return AuthorizationDecision.Allow();
@@ -42,6 +46,9 @@ public sealed class AuthorizationService(
         RoleId roleId,
         CancellationToken cancellationToken = default)
     {
+        if (await IsDisabledAsync(identityId, cancellationToken).ConfigureAwait(false))
+            return AuthorizationDecision.Deny("identity_disabled");
+
         var effective = await EvaluateAsync(identityId, tenantId, cancellationToken).ConfigureAwait(false);
         if (effective.AssignedRoles.Contains(roleId))
             return AuthorizationDecision.Allow();
@@ -64,6 +71,9 @@ public sealed class AuthorizationService(
         TAction action,
         CancellationToken cancellationToken = default)
     {
+        if (await IsDisabledAsync(identityId, cancellationToken).ConfigureAwait(false))
+            return AuthorizationDecision.Deny("identity_disabled");
+
         var handler = services.GetService<IResourceAuthorizationHandler<TResource, TAction>>();
         if (handler is null)
             return AuthorizationDecision.Deny("missing_resource_handler");
@@ -144,6 +154,14 @@ public sealed class AuthorizationService(
         var effective = new EffectiveAuthorization(assigned, permissions);
         cache.Set(tenantId, identityId, version, effective);
         return effective;
+    }
+
+    async ValueTask<bool> IsDisabledAsync(IdentityId identityId, CancellationToken cancellationToken)
+    {
+        if (identities is null)
+            return false;
+        var identity = await identities.TryGetAsync(identityId, cancellationToken).ConfigureAwait(false);
+        return identity is { Disabled: true };
     }
 
     async ValueTask ObserveAsync(

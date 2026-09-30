@@ -10,6 +10,7 @@ namespace Novolis.Security.Tests;
 
 public class OAuthRedTeamTests
 {
+    static readonly DPoPProofFactory Proofs = new();
     [Test]
     public async Task UnsignedAndHs256Tokens_AreRejected()
     {
@@ -44,17 +45,21 @@ public class OAuthRedTeamTests
         var (identityId, _) = await OAuthTestHost.SeedIdentityAsync(provider);
         var tokens = provider.GetRequiredService<ITokenService>();
         var first = await RedeemAsync(provider, tokens, identityId);
-        var request = new TokenIssueRequest
-        {
-            GrantType = OAuthGrantTypes.RefreshToken,
-            ClientId = "space-game-web",
-            ClientSecret = "client-secret",
-            RefreshToken = first.RefreshToken,
-        };
-
         var results = await Task.WhenAll(
-            tokens.IssueAsync(request).AsTask(),
-            tokens.IssueAsync(request).AsTask());
+            tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
+            {
+                GrantType = OAuthGrantTypes.RefreshToken,
+                ClientId = "space-game-web",
+                ClientSecret = "client-secret",
+                RefreshToken = first.RefreshToken,
+            })).AsTask(),
+            tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
+            {
+                GrantType = OAuthGrantTypes.RefreshToken,
+                ClientId = "space-game-web",
+                ClientSecret = "client-secret",
+                RefreshToken = first.RefreshToken,
+            })).AsTask());
         await Assert.That(results.Count(r => r.Succeeded)).IsEqualTo(1);
     }
 
@@ -77,7 +82,7 @@ public class OAuthRedTeamTests
             CodeChallenge = challenge,
             CodeChallengeMethod = "S256",
         });
-        return await tokens.IssueAsync(new TokenIssueRequest
+        return await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
         {
             GrantType = OAuthGrantTypes.AuthorizationCode,
             ClientId = "space-game-web",
@@ -85,6 +90,6 @@ public class OAuthRedTeamTests
             AuthorizationCode = code.Code,
             RedirectUri = "https://game.example/callback",
             CodeVerifier = verifier,
-        });
+        }));
     }
 }

@@ -118,6 +118,7 @@ public static class OAuthEndpointRouteBuilderExtensions
         if (!TryResolveClient(context, form, out var clientId, out var clientSecret, out var clientError))
             return clientError!;
 
+        var options = context.RequestServices.GetRequiredService<IOptions<OAuthOptions>>().Value;
         var result = await tokens.IssueAsync(
             new TokenIssueRequest
             {
@@ -130,6 +131,11 @@ public static class OAuthEndpointRouteBuilderExtensions
                 RefreshToken = form["refresh_token"].ToString(),
                 Scope = form["scope"].ToString(),
                 Audience = form["audience"].ToString(),
+                RemoteAddress = ResolveRemoteAddress(context, options),
+                DPoPProof = context.Request.Headers["DPoP"].ToString(),
+                HttpMethod = context.Request.Method,
+                HttpUri = options.Issuer.ToString().TrimEnd('/') + "/oauth/token",
+                CertificateThumbprintSha256 = ClientCertificateThumbprint(context),
             },
             cancellationToken).ConfigureAwait(false);
 
@@ -335,5 +341,27 @@ public static class OAuthEndpointRouteBuilderExtensions
     {
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers.Pragma = "no-cache";
+    }
+
+    static string? ResolveRemoteAddress(HttpContext context, OAuthOptions options)
+    {
+        if (options.TrustForwardedFor
+            && context.Request.Headers.TryGetValue("X-Forwarded-For", out var forwarded))
+        {
+            var first = forwarded.ToString().Split(',')[0].Trim();
+            if (!string.IsNullOrEmpty(first))
+                return first;
+        }
+
+        return context.Connection.RemoteIpAddress?.ToString();
+    }
+
+    static string? ClientCertificateThumbprint(HttpContext context)
+    {
+        var certificate = context.Connection.ClientCertificate;
+        if (certificate is null)
+            return null;
+        return Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(
+            System.Security.Cryptography.SHA256.HashData(certificate.RawData));
     }
 }

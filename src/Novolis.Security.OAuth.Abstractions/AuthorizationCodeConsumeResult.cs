@@ -16,7 +16,9 @@ public sealed class AuthorizationCodeConsumeResult
     public static AuthorizationCodeConsumeResult Success(AuthorizationCodeRecord record) =>
         new() { Succeeded = true, Record = record };
 
-    /// <summary>Creates a failed result.</summary>
-    public static AuthorizationCodeConsumeResult Failure(bool replayed = false) =>
-        new() { WasReplayed = replayed };
+    /// <summary>Creates a failed result, optionally carrying a replayed record.</summary>
+    public static AuthorizationCodeConsumeResult Failure(
+        bool replayed = false,
+        AuthorizationCodeRecord? record = null) =>
+        new() { WasReplayed = replayed, Record = record };
 }

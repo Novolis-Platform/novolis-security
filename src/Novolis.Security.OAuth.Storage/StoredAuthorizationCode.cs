@@ -40,4 +40,10 @@ public sealed class StoredAuthorizationCode : IHasId
 
     /// <summary>Consumption time.</summary>
     public DateTimeOffset? ConsumedUtc { get; set; }
+
+    /// <summary>Access-token jti issued on redemption.</summary>
+    public string? AccessTokenJti { get; set; }
+
+    /// <summary>Refresh family issued on redemption.</summary>
+    public Guid? RefreshFamilyId { get; set; }
 }

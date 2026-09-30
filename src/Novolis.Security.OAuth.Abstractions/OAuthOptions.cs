@@ -41,4 +41,16 @@ public sealed class OAuthOptions
 
     /// <summary>Whether to advertise the compatibility metadata alias.</summary>
     public bool EnableOpenIdConfigurationAlias { get; set; }
+
+    /// <summary>
+    /// When true, the token endpoint uses the left-most <c>X-Forwarded-For</c> value as the remote address.
+    /// Leave false unless a trusted reverse proxy is stripping untrusted forwarded headers.
+    /// </summary>
+    public bool TrustForwardedFor { get; set; }
+
+    /// <summary>
+    /// Allows in-memory OAuth stores and the no-op event sink outside Development.
+    /// Production hosts must not set this.
+    /// </summary>
+    public bool AllowInMemoryStores { get; set; }
 }

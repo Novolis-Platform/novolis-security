@@ -40,4 +40,13 @@ public sealed class StoredRefreshToken : IHasId
 
     /// <summary>Replacement token id.</summary>
     public Guid? ReplacedById { get; set; }
+
+    /// <summary>Absolute expiry of the rotation family.</summary>
+    public DateTimeOffset FamilyExpiresUtc { get; set; }
+
+    /// <summary>DPoP JWK thumbprint bound to this family.</summary>
+    public string? CnfJkt { get; set; }
+
+    /// <summary>Certificate thumbprint bound to this family.</summary>
+    public string? CnfX5tS256 { get; set; }
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -70,7 +71,7 @@ public sealed class OAuthTokenService : ITokenService
             return await DenyAsync(request, OAuthTokenErrors.UnsupportedGrantType, cancellationToken)
                 .ConfigureAwait(false);
 
-        if (await IsRateLimitedAsync(request.ClientId, cancellationToken).ConfigureAwait(false))
+        if (await IsRateLimitedAsync(request, cancellationToken).ConfigureAwait(false))
             return await DenyAsync(request, OAuthTokenErrors.RateLimited, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -85,12 +86,17 @@ public sealed class OAuthTokenService : ITokenService
             return await DenyAsync(request, OAuthTokenErrors.UnauthorizedClient, cancellationToken)
                 .ConfigureAwait(false);
 
+        var sender = await ResolveSenderAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!sender.Succeeded)
+            return await DenyAsync(request, OAuthTokenErrors.InvalidRequest, cancellationToken)
+                .ConfigureAwait(false);
+
         var result = request.GrantType switch
         {
-            OAuthGrantTypes.AuthorizationCode => await RedeemAuthorizationCodeAsync(client, request, cancellationToken)
+            OAuthGrantTypes.AuthorizationCode => await RedeemAuthorizationCodeAsync(client, request, sender, cancellationToken)
                 .ConfigureAwait(false),
-            OAuthGrantTypes.ClientCredentials => IssueClientCredentials(client, request.Scope, request.Audience),
-            OAuthGrantTypes.RefreshToken => await IssueRefreshAsync(client, request, cancellationToken)
+            OAuthGrantTypes.ClientCredentials => IssueClientCredentials(client, request.Scope, request.Audience, sender),
+            OAuthGrantTypes.RefreshToken => await IssueRefreshAsync(client, request, sender, cancellationToken)
                 .ConfigureAwait(false),
             _ => TokenIssueResult.Fail(OAuthTokenErrors.UnsupportedGrantType),
         };
@@ -225,18 +231,101 @@ public sealed class OAuthTokenService : ITokenService
     /// <summary>Public JWKS projection.</summary>
     public JsonWebKeySet GetJsonWebKeySet() => _keys.GetJsonWebKeySet();
 
-    /// <summary>Validates an access token using issuer, audience, ES384, and lifetime checks.</summary>
+    /// <summary>Validates an access token using issuer, audience, ES384, lifetime, confirmation, and revocation checks.</summary>
+    public ValueTask<TokenValidationResult> ValidateAsync(
+        string token,
+        CancellationToken cancellationToken = default) =>
+        ValidateAsync(token, proof: null, cancellationToken);
+
+    /// <summary>Validates an access token and, when the token is sender-constrained, the matching proof.</summary>
     public async ValueTask<TokenValidationResult> ValidateAsync(
         string token,
+        TokenProofContext? proof,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(token);
-        return await _handler.ValidateTokenAsync(token, CreateValidationParameters()).ConfigureAwait(false);
+        var validated = await _handler.ValidateTokenAsync(token, CreateValidationParameters()).ConfigureAwait(false);
+        if (!validated.IsValid || validated.SecurityToken is not JsonWebToken jwt)
+            return validated;
+
+        if (await _cache.GetAsync("oauth:deny-jti:" + jwt.Id, cancellationToken).ConfigureAwait(false) > 0)
+            return Invalid("Token has been revoked.");
+
+        if (IdentityId.TryParse(jwt.Subject, out var identityId))
+        {
+            var cutoff = await _cache.GetAsync("oauth:nbf:" + identityId, cancellationToken).ConfigureAwait(false);
+            if (cutoff > 0)
+            {
+                var issued = new DateTimeOffset(DateTime.SpecifyKind(jwt.IssuedAt, DateTimeKind.Utc)).ToUnixTimeSeconds();
+                if (issued <= cutoff)
+                    return Invalid("Token was issued before identity revocation.");
+            }
+        }
+
+        if (!TryReadConfirmation(jwt, out var cnf))
+            return Invalid("Access token is not sender-constrained.");
+
+        if (cnf.TryGetProperty("jkt", out var jktElement))
+        {
+            if (proof?.DPoPProof is null)
+                return Invalid("DPoP proof is required.");
+            var dpop = await DPoPProof.ValidateAsync(
+                proof.DPoPProof,
+                proof.HttpMethod,
+                proof.HttpUri,
+                _time,
+                _options.ClockSkew,
+                token).ConfigureAwait(false);
+            if (!dpop.Succeeded
+                || !string.Equals(dpop.Jkt, jktElement.GetString(), StringComparison.Ordinal)
+                || !await _cache.TryCreateAsync("oauth:dpop:" + dpop.Jti, _options.AccessTokenLifetime, cancellationToken)
+                    .ConfigureAwait(false))
+                return Invalid("DPoP proof is invalid.");
+        }
+        else if (cnf.TryGetProperty("x5t#S256", out var x5tElement))
+        {
+            if (!string.Equals(proof?.CertificateThumbprintSha256, x5tElement.GetString(), StringComparison.Ordinal))
+                return Invalid("Client certificate thumbprint does not match.");
+        }
+        else
+        {
+            return Invalid("Access token confirmation is incomplete.");
+        }
+
+        return validated;
+    }
+
+    static TokenValidationResult Invalid(string message) =>
+        new() { IsValid = false, Exception = new SecurityTokenValidationException(message) };
+
+    static bool TryReadConfirmation(JsonWebToken jwt, out JsonElement cnf)
+    {
+        if (jwt.TryGetPayloadValue("cnf", out JsonElement element)
+            && element.ValueKind == JsonValueKind.Object)
+        {
+            cnf = element.Clone();
+            return true;
+        }
+
+        if (jwt.TryGetPayloadValue("cnf", out string? json)
+            && !string.IsNullOrWhiteSpace(json))
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                cnf = document.RootElement.Clone();
+                return true;
+            }
+        }
+
+        cnf = default;
+        return false;
     }
 
     async ValueTask<TokenIssueResult> RedeemAuthorizationCodeAsync(
         OAuthClient client,
         TokenIssueRequest request,
+        SenderBinding sender,
         CancellationToken cancellationToken)
     {
         if (!AuthorizationCodeFormat.TryParse(request.AuthorizationCode, out var codeId, out var secret)
@@ -244,6 +333,10 @@ public sealed class OAuthTokenService : ITokenService
             || string.IsNullOrWhiteSpace(request.CodeVerifier))
             return TokenIssueResult.Fail(OAuthTokenErrors.InvalidGrant);
 
+        var leased = await _cache.TryCreateAsync(
+            "oauth:code:" + codeId.ToString("N"),
+            _options.AuthorizationCodeLifetime,
+            cancellationToken).ConfigureAwait(false);
         var challenge = ComputeS256(request.CodeVerifier);
         var consumed = await _codes.TryConsumeAsync(
             codeId,
@@ -254,8 +347,12 @@ public sealed class OAuthTokenService : ITokenService
             _time.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
         CryptographicOperations.ZeroMemory(secret);
-        if (!consumed.Succeeded || consumed.Record is null)
+        if (!consumed.Succeeded || consumed.Record is null || !leased)
+        {
+            if (consumed.WasReplayed)
+                await RevokeCodeIssuanceAsync(consumed.Record, cancellationToken).ConfigureAwait(false);
             return TokenIssueResult.Fail(OAuthTokenErrors.InvalidGrant);
+        }
 
         var record = consumed.Record;
         if (_identities is not null)
@@ -265,13 +362,17 @@ public sealed class OAuthTokenService : ITokenService
                 return TokenIssueResult.Fail(OAuthTokenErrors.InvalidGrant);
         }
 
-        var access = CreateAccessToken(record.IdentityId, client, record.Scope, record.Audience);
+        var access = CreateAccessToken(record.IdentityId, client, record.Scope, record.Audience, sender);
         var refresh = await CreateRefreshTokenAsync(
             record.IdentityId,
             client,
             record.Scope,
             record.Audience,
+            sender,
             cancellationToken).ConfigureAwait(false);
+        record.AccessTokenJti = access.Jti;
+        record.RefreshFamilyId = refresh.FamilyId;
+        await _codes.UpsertAsync(record, cancellationToken).ConfigureAwait(false);
         await ObserveTypeAsync(
             SecurityEventTypes.AuthorizationCodeRedeemed,
             client.ClientId,
@@ -279,10 +380,14 @@ public sealed class OAuthTokenService : ITokenService
             OAuthGrantTypes.AuthorizationCode,
             null,
             cancellationToken).ConfigureAwait(false);
-        return TokenIssueResult.Ok(access, ExpiresInSeconds(), refresh, record.Scope, record.IdentityId);
+        return TokenIssueResult.Ok(access.Token, ExpiresInSeconds(), refresh.Wire, record.Scope, record.IdentityId);
     }
 
-    TokenIssueResult IssueClientCredentials(OAuthClient client, string? requestedScope, string? requestedAudience)
+    TokenIssueResult IssueClientCredentials(
+        OAuthClient client,
+        string? requestedScope,
+        string? requestedAudience,
+        SenderBinding sender)
     {
         if (client.ClientType != OAuthClientType.Confidential)
             return TokenIssueResult.Fail(OAuthTokenErrors.UnauthorizedClient);
@@ -290,13 +395,14 @@ public sealed class OAuthTokenService : ITokenService
             || !TryResolveAudience(requestedAudience, client, out var audience))
             return TokenIssueResult.Fail(OAuthTokenErrors.InvalidScope);
 
-        var access = CreateAccessToken(null, client, scope, audience);
-        return TokenIssueResult.Ok(access, ExpiresInSeconds(), null, scope, null);
+        var access = CreateAccessToken(null, client, scope, audience, sender);
+        return TokenIssueResult.Ok(access.Token, ExpiresInSeconds(), null, scope, null);
     }
 
     async ValueTask<TokenIssueResult> IssueRefreshAsync(
         OAuthClient client,
         TokenIssueRequest request,
+        SenderBinding sender,
         CancellationToken cancellationToken)
     {
         if (client.ClientType != OAuthClientType.Confidential
@@ -316,7 +422,12 @@ public sealed class OAuthTokenService : ITokenService
             return TokenIssueResult.Fail(OAuthTokenErrors.InvalidGrant);
 
         var now = _time.GetUtcNow();
-        if (row.ExpiresUtc <= now)
+        var familyExpires = row.FamilyExpiresUtc == default
+            ? row.CreatedUtc + _options.RefreshTokenLifetime
+            : row.FamilyExpiresUtc;
+        if (row.ExpiresUtc <= now || familyExpires <= now)
+            return TokenIssueResult.Fail(OAuthTokenErrors.InvalidGrant);
+        if (!SenderMatches(row, sender))
             return TokenIssueResult.Fail(OAuthTokenErrors.InvalidGrant);
         if (row.RevokedUtc is not null)
         {
@@ -357,10 +468,30 @@ public sealed class OAuthTokenService : ITokenService
             Scope = scope,
             Audience = row.Audience,
             CreatedUtc = now,
-            ExpiresUtc = now + _options.RefreshTokenLifetime,
+            ExpiresUtc = Min(now + _options.RefreshTokenLifetime, familyExpires),
+            FamilyExpiresUtc = familyExpires,
+            CnfJkt = row.CnfJkt,
+            CnfX5tS256 = row.CnfX5tS256,
         };
         CryptographicOperations.ZeroMemory(secret);
         CryptographicOperations.ZeroMemory(nextSecret);
+
+        var leased = await _cache.TryCreateAsync(
+            "oauth:rotate:" + tokenId.ToString("N"),
+            _options.AccessTokenLifetime,
+            cancellationToken).ConfigureAwait(false);
+        if (!leased)
+        {
+            await _refresh.RevokeFamilyAsync(row.FamilyId, now, cancellationToken).ConfigureAwait(false);
+            await ObserveTypeAsync(
+                SecurityEventTypes.RefreshReuseDetected,
+                client.ClientId,
+                row.IdentityId,
+                OAuthGrantTypes.RefreshToken,
+                OAuthTokenErrors.InvalidGrant,
+                cancellationToken).ConfigureAwait(false);
+            return TokenIssueResult.Fail(OAuthTokenErrors.InvalidGrant);
+        }
 
         var rotated = await _refresh.TryRotateAsync(
             tokenId,
@@ -381,7 +512,7 @@ public sealed class OAuthTokenService : ITokenService
             return TokenIssueResult.Fail(OAuthTokenErrors.InvalidGrant);
         }
 
-        var access = CreateAccessToken(row.IdentityId, client, scope, row.Audience);
+        var access = CreateAccessToken(row.IdentityId, client, scope, row.Audience, sender);
         await ObserveTypeAsync(
             SecurityEventTypes.RefreshTokenRotated,
             client.ClientId,
@@ -389,20 +520,22 @@ public sealed class OAuthTokenService : ITokenService
             OAuthGrantTypes.RefreshToken,
             null,
             cancellationToken).ConfigureAwait(false);
-        return TokenIssueResult.Ok(access, ExpiresInSeconds(), wire, scope, row.IdentityId);
+        return TokenIssueResult.Ok(access.Token, ExpiresInSeconds(), wire, scope, row.IdentityId);
     }
 
-    async ValueTask<string> CreateRefreshTokenAsync(
+    async ValueTask<(string Wire, Guid FamilyId)> CreateRefreshTokenAsync(
         IdentityId identityId,
         OAuthClient client,
         string scope,
         string audience,
+        SenderBinding sender,
         CancellationToken cancellationToken)
     {
         var id = Guid.CreateVersion7();
         var familyId = Guid.CreateVersion7();
         var wire = RefreshTokenFormat.Create(id, out var secret);
         var now = _time.GetUtcNow();
+        var familyExpires = now + _options.RefreshTokenLifetime;
         await _refresh.UpsertAsync(
             new RefreshTokenRecord
             {
@@ -415,21 +548,29 @@ public sealed class OAuthTokenService : ITokenService
                 Scope = scope,
                 Audience = audience,
                 CreatedUtc = now,
-                ExpiresUtc = now + _options.RefreshTokenLifetime,
+                ExpiresUtc = familyExpires,
+                FamilyExpiresUtc = familyExpires,
+                CnfJkt = sender.Jkt,
+                CnfX5tS256 = sender.X5tS256,
             },
             cancellationToken).ConfigureAwait(false);
         CryptographicOperations.ZeroMemory(secret);
-        return wire;
+        return (wire, familyId);
     }
 
-    string CreateAccessToken(
+    (string Token, string Jti) CreateAccessToken(
         IdentityId? identityId,
         OAuthClient client,
         string scope,
-        string audience)
+        string audience,
+        SenderBinding sender)
     {
         var now = _time.GetUtcNow();
         var subject = identityId?.ToString() ?? client.ClientId;
+        var jti = Guid.CreateVersion7().ToString("D");
+        var cnf = sender.Jkt is not null
+            ? "{\"jkt\":\"" + sender.Jkt + "\"}"
+            : "{\"x5t#S256\":\"" + sender.X5tS256 + "\"}";
         var descriptor = new SecurityTokenDescriptor
         {
             Issuer = _options.Issuer.ToString(),
@@ -439,14 +580,15 @@ public sealed class OAuthTokenService : ITokenService
                 new Claim(JwtRegisteredClaimNames.Sub, subject),
                 new Claim("client_id", client.ClientId),
                 new Claim("scope", scope),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.CreateVersion7().ToString("D")),
+                new Claim(JwtRegisteredClaimNames.Jti, jti),
+                new Claim("cnf", cnf, "JSON"),
             ]),
             IssuedAt = now.UtcDateTime,
             NotBefore = now.UtcDateTime,
             Expires = (now + _options.AccessTokenLifetime).UtcDateTime,
             SigningCredentials = _keys.GetSigningCredentials(),
         };
-        return _handler.CreateToken(descriptor);
+        return (_handler.CreateToken(descriptor), jti);
     }
 
     async ValueTask<OAuthClient?> AuthenticateClientAsync(
@@ -472,13 +614,75 @@ public sealed class OAuthTokenService : ITokenService
         return client;
     }
 
-    async ValueTask<bool> IsRateLimitedAsync(string? clientId, CancellationToken cancellationToken)
+    async ValueTask<bool> IsRateLimitedAsync(TokenIssueRequest request, CancellationToken cancellationToken)
     {
-        var key = "oauth:rate:client:" + (string.IsNullOrWhiteSpace(clientId) ? "_" : clientId);
-        var count = await _cache.IncrementAsync(key, _options.TokenAttemptWindow, cancellationToken)
+        var clientKey = "oauth:rate:client:" + (string.IsNullOrWhiteSpace(request.ClientId) ? "_" : request.ClientId);
+        var clientCount = await _cache.IncrementAsync(clientKey, _options.TokenAttemptWindow, cancellationToken)
             .ConfigureAwait(false);
-        return count > _options.TokenAttemptsPerWindow;
+        if (clientCount > _options.TokenAttemptsPerWindow)
+            return true;
+
+        if (string.IsNullOrWhiteSpace(request.RemoteAddress))
+            return false;
+
+        var ipCount = await _cache.IncrementAsync(
+            "oauth:rate:ip:" + request.RemoteAddress,
+            _options.TokenAttemptWindow,
+            cancellationToken).ConfigureAwait(false);
+        return ipCount > _options.TokenAttemptsPerWindow;
     }
+
+    async ValueTask<SenderBinding> ResolveSenderAsync(TokenIssueRequest request, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(request.CertificateThumbprintSha256)
+            && string.IsNullOrWhiteSpace(request.DPoPProof))
+            return SenderBinding.FromCertificate(request.CertificateThumbprintSha256);
+
+        if (string.IsNullOrWhiteSpace(request.DPoPProof))
+            return SenderBinding.Fail();
+
+        var proof = await DPoPProof.ValidateAsync(
+            request.DPoPProof,
+            request.HttpMethod,
+            string.IsNullOrWhiteSpace(request.HttpUri) ? _options.Issuer.ToString().TrimEnd('/') + "/oauth/token" : request.HttpUri,
+            _time,
+            _options.ClockSkew).ConfigureAwait(false);
+        if (!proof.Succeeded || proof.Jkt is null || proof.Jti is null)
+            return SenderBinding.Fail();
+        if (!await _cache.TryCreateAsync("oauth:dpop:" + proof.Jti, _options.AccessTokenLifetime, cancellationToken)
+                .ConfigureAwait(false))
+            return SenderBinding.Fail();
+        return SenderBinding.FromDPoP(proof.Jkt);
+    }
+
+    static bool SenderMatches(RefreshTokenRecord row, SenderBinding sender)
+    {
+        if (row.CnfJkt is not null)
+            return string.Equals(row.CnfJkt, sender.Jkt, StringComparison.Ordinal);
+        if (row.CnfX5tS256 is not null)
+            return string.Equals(row.CnfX5tS256, sender.X5tS256, StringComparison.Ordinal);
+        return sender.Succeeded;
+    }
+
+    async ValueTask RevokeCodeIssuanceAsync(AuthorizationCodeRecord? record, CancellationToken cancellationToken)
+    {
+        if (record is null)
+            return;
+        var now = _time.GetUtcNow();
+        if (record.RefreshFamilyId is Guid familyId)
+            await _refresh.RevokeFamilyAsync(familyId, now, cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(record.AccessTokenJti))
+        {
+            await _cache.SetAsync(
+                "oauth:deny-jti:" + record.AccessTokenJti,
+                1,
+                _options.AccessTokenLifetime + _options.ClockSkew,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    static DateTimeOffset Min(DateTimeOffset left, DateTimeOffset right) =>
+        left <= right ? left : right;
 
     static bool TryGrantScopes(string? requested, OAuthClient client, out string scope)
     {
@@ -620,5 +824,14 @@ public sealed class OAuthTokenService : ITokenService
             return;
         if (_options.AllowEphemeralSigningKey)
             throw new InvalidOperationException(SigningKeyRing.DevelopmentPemForbidden);
+        if (_options.AllowInMemoryStores)
+            return;
+        if (_cache.IsProcessLocal
+            || _clients is InMemoryClientStore
+            || _codes is InMemoryAuthorizationCodeStore
+            || _refresh is InMemoryRefreshTokenStore
+            || _events is NoopEventStore)
+            throw new InvalidOperationException(
+                "Production OAuth hosts must replace in-memory stores and the no-op event sink, or set AllowInMemoryStores.");
     }
 }

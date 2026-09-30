@@ -27,6 +27,6 @@ Local multi-repo iteration uses ProjectReference mode via `d:\novolis\Novolis.Pl
 
 - [REFACTORING_SPEC.md](../REFACTORING_SPEC.md) — Authentication, OAuth, and Authorization end-state
 - [design.md](design.md) — layer placement and non-goals
-- [owasp-security-evaluation.md](owasp-security-evaluation.md) — OWASP evaluation of identity, hashing, and crypto libraries
+- [owasp-security-evaluation.md](owasp-security-evaluation.md) — OWASP ASVS 5.0.0 evaluation of identity, hashing, and crypto libraries
 - [release.md](release.md) — publish cadence
 - [Org docs catalog](https://novolis-platform.github.io/.github/)

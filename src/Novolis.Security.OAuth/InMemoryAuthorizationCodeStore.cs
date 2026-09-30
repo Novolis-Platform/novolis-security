@@ -36,7 +36,7 @@ public sealed class InMemoryAuthorizationCodeStore : IAuthorizationCodeStore
                 return ValueTask.FromResult(AuthorizationCodeConsumeResult.Failure());
 
             if (record.ConsumedUtc is not null)
-                return ValueTask.FromResult(AuthorizationCodeConsumeResult.Failure(replayed: true));
+                return ValueTask.FromResult(AuthorizationCodeConsumeResult.Failure(replayed: true, record));
             if (record.ExpiresUtc <= now
                 || !CryptographicEquals(record.SecretHash, secretHash)
                 || !string.Equals(record.ClientId, clientId, StringComparison.Ordinal)

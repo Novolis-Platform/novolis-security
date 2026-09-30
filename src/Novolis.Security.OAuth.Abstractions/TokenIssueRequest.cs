@@ -29,4 +29,19 @@ public sealed class TokenIssueRequest
 
     /// <summary>Requested resource-server audience.</summary>
     public string? Audience { get; init; }
+
+    /// <summary>Caller address used for per-IP attempt limits.</summary>
+    public string? RemoteAddress { get; init; }
+
+    /// <summary>RFC 9449 DPoP proof JWT.</summary>
+    public string? DPoPProof { get; init; }
+
+    /// <summary>HTTP method bound to the DPoP proof.</summary>
+    public string HttpMethod { get; init; } = "POST";
+
+    /// <summary>HTTP URI bound to the DPoP proof, without a query string.</summary>
+    public string HttpUri { get; init; } = "";
+
+    /// <summary>SHA-256 thumbprint of a presented client certificate, Base64URL.</summary>
+    public string? CertificateThumbprintSha256 { get; init; }
 }

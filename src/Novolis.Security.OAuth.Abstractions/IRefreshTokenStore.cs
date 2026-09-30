@@ -1,3 +1,5 @@
+using Novolis.Security.Authentication;
+
 namespace Novolis.Security.OAuth;
 
 /// <summary>Persists hashed refresh tokens with atomic rotation operations.</summary>
@@ -11,6 +13,11 @@ public interface IRefreshTokenStore
 
     /// <summary>All rows in a rotation family (for reuse revocation).</summary>
     ValueTask<IReadOnlyList<RefreshTokenRecord>> FindByFamilyIdAsync(Guid familyId, CancellationToken ct = default);
+
+    /// <summary>All refresh rows issued to an identity.</summary>
+    ValueTask<IReadOnlyList<RefreshTokenRecord>> FindByIdentityIdAsync(
+        IdentityId identityId,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Revokes <paramref name="currentId"/> and inserts <paramref name="replacement"/> only if

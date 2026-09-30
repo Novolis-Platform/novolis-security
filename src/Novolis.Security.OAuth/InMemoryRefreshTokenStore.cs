@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Novolis.Security.Authentication;
 
 namespace Novolis.Security.OAuth;
 
@@ -27,6 +28,17 @@ public sealed class InMemoryRefreshTokenStore : IRefreshTokenStore
     public ValueTask<IReadOnlyList<RefreshTokenRecord>> FindByFamilyIdAsync(Guid familyId, CancellationToken ct = default)
     {
         IReadOnlyList<RefreshTokenRecord> matches = _tokens.Values.Where(t => t.FamilyId == familyId).ToArray();
+        return ValueTask.FromResult(matches);
+    }
+
+    /// <inheritdoc />
+    public ValueTask<IReadOnlyList<RefreshTokenRecord>> FindByIdentityIdAsync(
+        IdentityId identityId,
+        CancellationToken ct = default)
+    {
+        IReadOnlyList<RefreshTokenRecord> matches = _tokens.Values
+            .Where(t => t.IdentityId == identityId)
+            .ToArray();
         return ValueTask.FromResult(matches);
     }
 
