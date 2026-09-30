@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Novolis.Security.Authorization;
 
@@ -40,7 +42,14 @@ public static class AuthorizationServiceCollectionExtensions
         services.TryAddSingleton<BuiltInRoleProvider>();
         services.TryAddSingleton<StoredRoleProvider>();
         services.TryAddSingleton<IRoleProvider, CompositeRoleProvider>();
-        services.TryAddSingleton<IAuthorizationEventSink>(_ => NoopAuthorizationEventSink.Instance);
+        services.TryAddSingleton<IAuthorizationEventSink>(sp =>
+        {
+            var factory = sp.GetService<ILoggerFactory>();
+            ILogger<LoggerAuthorizationEventSink> logger = factory is null
+                ? NullLogger<LoggerAuthorizationEventSink>.Instance
+                : factory.CreateLogger<LoggerAuthorizationEventSink>();
+            return new LoggerAuthorizationEventSink(logger);
+        });
         services.TryAddSingleton<AuthorizationService>();
         services.TryAddSingleton<IAuthorizationService>(sp => sp.GetRequiredService<AuthorizationService>());
         return services;

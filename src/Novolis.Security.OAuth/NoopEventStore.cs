@@ -1,6 +1,6 @@
 namespace Novolis.Security.OAuth;
 
-/// <summary>Default event sink. Records nothing. Replace with a recording or queued implementation to observe grants.</summary>
+/// <summary>Explicit no-op event sink. The library default is <c>LoggerEventStore</c>; production still refuses this type unless <c>AllowInMemoryStores</c> is set.</summary>
 public sealed class NoopEventStore : IEventStore
 {
     /// <summary>Shared instance.</summary>

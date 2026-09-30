@@ -65,6 +65,57 @@ public class OwaspHttpScenarioTests
     }
 
     [Test]
+    public async Task Authorize_FormPost_KeepsCodeOutOfTheQueryString()
+    {
+        await using var host = await OAuthTestHost.StartAsync();
+        await OAuthTestHost.SeedConfidentialClientAsync(host.Services);
+        var (_, sessionId) = await OAuthTestHost.SeedIdentityAsync(host.Services);
+        var response = await host.Client.SendAsync(
+            AuthorizedGet(sessionId, "&response_mode=form_post&state=csrf-token"));
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(response.Headers.Location).IsNull();
+        await Assert.That(response.Content.Headers.ContentType?.MediaType).IsEqualTo("text/html");
+        var html = await response.Content.ReadAsStringAsync();
+        await Assert.That(html).Contains("action=\"https://game.example/callback\"");
+        await Assert.That(html).Contains("name=\"code\"");
+        await Assert.That(html).Contains("name=\"state\" value=\"csrf-token\"");
+        await Assert.That(html).Contains("document.forms[0].submit()");
+    }
+
+    [Test]
+    public async Task Authorize_FormPost_HtmlEncodesState()
+    {
+        await using var host = await OAuthTestHost.StartAsync();
+        await OAuthTestHost.SeedConfidentialClientAsync(host.Services);
+        var (_, sessionId) = await OAuthTestHost.SeedIdentityAsync(host.Services);
+        var response = await host.Client.SendAsync(
+            AuthorizedGet(sessionId, "&response_mode=form_post&state=" + Uri.EscapeDataString("x\"><script>alert(1)</script>")));
+        var html = await response.Content.ReadAsStringAsync();
+        await Assert.That(html).Contains("&lt;script&gt;alert(1)&lt;/script&gt;");
+        await Assert.That(html.Contains("value=\"x\"><script>", StringComparison.Ordinal)).IsFalse();
+    }
+
+    [Test]
+    public async Task TokenError_IsGenericJson_WithoutStackOrSecrets()
+    {
+        await using var host = await OAuthTestHost.StartAsync();
+        await OAuthTestHost.SeedConfidentialClientAsync(host.Services);
+        var password = await host.PostTokenAsync(new Dictionary<string, string>
+        {
+            ["grant_type"] = "password",
+            ["client_id"] = "space-game-web",
+            ["client_secret"] = "client-secret",
+        });
+        var raw = await password.Content.ReadAsStringAsync();
+        await Assert.That(raw.Contains("Exception", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(raw.Contains(" at ", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(raw.Contains("BEGIN", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(raw.Contains("client-secret", StringComparison.Ordinal)).IsFalse();
+        var body = JsonSerializer.Deserialize<JsonElement>(raw);
+        await Assert.That(body.GetProperty("error").GetString()).IsEqualTo(OAuthTokenErrors.UnsupportedGrantType);
+    }
+
+    [Test]
     public async Task TokenEndpoint_RejectsGet_AndMarksErrorsNoStore()
     {
         await using var host = await OAuthTestHost.StartAsync();
@@ -96,6 +147,11 @@ public class OwaspHttpScenarioTests
         var grants = metadata.GetProperty("grant_types_supported").EnumerateArray().Select(item => item.GetString()).ToArray();
         await Assert.That(grants.Contains("password")).IsFalse();
         await Assert.That(grants.Contains("implicit")).IsFalse();
+        var modes = metadata.GetProperty("response_modes_supported").EnumerateArray()
+            .Select(item => item.GetString())
+            .ToArray();
+        await Assert.That(modes.Contains("query")).IsTrue();
+        await Assert.That(modes.Contains("form_post")).IsTrue();
         await Assert.That(response.Headers.TryGetValues("Access-Control-Allow-Origin", out _)).IsFalse();
     }
 

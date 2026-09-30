@@ -1,7 +1,6 @@
 using Novolis.Security.HaveIBeenPwned;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Novolis.Testing.Logging;
 using TUnit.Core;
 
 namespace Novolis.Security.Tests;
@@ -18,6 +17,21 @@ public class HaveIBeenPwnedClientTest
         services.Configure<HibpConfiguration>(o => o.PwnedPasswordAddress = new Uri("https://api.pwnedpasswords.com/range"));
         services.AddSingleton<IHaveIBeenPwnedClient, HaveIBeenPwnedClient>();
         return services.BuildServiceProvider();
+    }
+
+    [Test]
+    public async Task RangeLookup_RefusesUnpinnedOrigins()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpClient();
+        services.Configure<HibpConfiguration>(o =>
+            o.PwnedPasswordAddress = new Uri("https://evil.example/range"));
+        services.AddSingleton<IHaveIBeenPwnedClient, HaveIBeenPwnedClient>();
+        await using var provider = services.BuildServiceProvider();
+        var client = provider.GetRequiredService<IHaveIBeenPwnedClient>();
+        await Assert.That(async () => await client.IsPwnedAsync("password"))
+            .Throws<InvalidOperationException>();
     }
 
     [Test]

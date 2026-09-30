@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Novolis.Security.Authentication;
 using Novolis.Security.Authorization;
 using TUnit.Core;
@@ -132,6 +133,38 @@ public class AuthorizationEngineTests
             .IsFalse();
     }
 
+    [Test]
+    public async Task Defaults_UseLoggerAuthorizationEventSink()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNovolisAuthorization();
+        await using var provider = services.BuildServiceProvider();
+        await Assert.That(provider.GetRequiredService<IAuthorizationEventSink>().GetType())
+            .IsEqualTo(typeof(LoggerAuthorizationEventSink));
+    }
+
+    [Test]
+    public async Task DeniedAuthorization_IsRecordedWithoutSecrets()
+    {
+        var events = new RecordingAuthorizationEventSink();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddNovolisAuthorization();
+        services.AddPermission<Kick>();
+        services.Replace(ServiceDescriptor.Singleton<IAuthorizationEventSink>(events));
+        await using var provider = services.BuildServiceProvider();
+        var identity = IdentityId.New();
+        var tenant = TenantId.New();
+        var denied = await provider.GetRequiredService<IAuthorizationService>()
+            .AuthorizeAsync(identity, tenant, AuthorizationIds.Permission<Kick>());
+        await Assert.That(denied.Succeeded).IsFalse();
+        await Assert.That(events.Last).IsNotNull();
+        await Assert.That(events.Last!.Type).IsEqualTo(AuthorizationEventTypes.AuthorizationDenied);
+        await Assert.That(events.Last.PermissionId).IsEqualTo(AuthorizationIds.Permission<Kick>().Value);
+        await Assert.That(events.Last.IdentityId).IsEqualTo(identity);
+    }
+
     static ServiceProvider CreateProvider()
     {
         var services = new ServiceCollection();
@@ -158,5 +191,18 @@ public class AuthorizationEngineTests
 
         public static IReadOnlySet<PermissionId> Permissions { get; } =
             new HashSet<PermissionId> { AuthorizationIds.Permission<Kick>(), AuthorizationIds.Permission<Ban>() };
+    }
+
+    sealed class RecordingAuthorizationEventSink : IAuthorizationEventSink
+    {
+        public AuthorizationSecurityEvent? Last { get; private set; }
+
+        public ValueTask RecordAsync(
+            AuthorizationSecurityEvent securityEvent,
+            CancellationToken cancellationToken = default)
+        {
+            Last = securityEvent;
+            return ValueTask.CompletedTask;
+        }
     }
 }

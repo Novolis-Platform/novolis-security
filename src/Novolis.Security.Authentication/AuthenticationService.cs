@@ -110,32 +110,10 @@ public sealed class AuthenticationService : IAuthenticationService
         ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
         ArgumentException.ThrowIfNullOrEmpty(password);
 
-        var minimum = Math.Max(_options.MinimumPasswordLength, AbsoluteMinimumPasswordLength);
-        if (password.Length < minimum)
-            return SignInResult.Fail("password_too_short");
-
-        if (_breachChecker is null)
-        {
-            if (!_options.IsDevelopment)
-                throw new InvalidOperationException(
-                    "IPasswordBreachChecker must be registered outside Development.");
-        }
-        else
-        {
-            bool breached;
-            try
-            {
-                breached = await _breachChecker.IsBreachedAsync(password, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception)
-            {
-                return SignInResult.Fail("password_check_unavailable");
-            }
-
-            if (breached)
-                return SignInResult.Fail("password_breached");
-        }
+        var policyError = await ValidateNewPasswordAsync(password, identifier, cancellationToken)
+            .ConfigureAwait(false);
+        if (policyError is not null)
+            return SignInResult.Fail(policyError);
 
         var existing = await _identities.FindByIdentifierAsync(identifier, cancellationToken)
             .ConfigureAwait(false);
@@ -226,6 +204,62 @@ public sealed class AuthenticationService : IAuthenticationService
     }
 
     /// <inheritdoc />
+    public async ValueTask<SignInResult> ChangePasswordAsync(
+        string identifier,
+        string currentPassword,
+        string newPassword,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+        ArgumentNullException.ThrowIfNull(currentPassword);
+        ArgumentException.ThrowIfNullOrEmpty(newPassword);
+
+        var identity = await _identities.FindByIdentifierAsync(identifier, cancellationToken)
+            .ConfigureAwait(false);
+        var credential = identity is null
+            ? null
+            : await _credentials.TryGetAsync(identity.CredentialReference, cancellationToken)
+                .ConfigureAwait(false);
+        var locked = credential is not null
+            && await IsLockedAsync(credential, cancellationToken).ConfigureAwait(false);
+        var hash = credential is null || locked ? _dummyHash : credential.PasswordHash;
+        var currentMatches = _hasher.CompareHashedPassword(hash, currentPassword);
+        if (identity is null || credential is null || identity.Disabled || locked || !currentMatches)
+        {
+            if (credential is not null && identity is not null && !identity.Disabled && !locked)
+                await RecordFailureAsync(credential, identity.Id, cancellationToken).ConfigureAwait(false);
+
+            await ObserveAsync(
+                AuthenticationEventTypes.SignInFailed,
+                identity?.Id,
+                "identifier",
+                "invalid_credentials",
+                cancellationToken).ConfigureAwait(false);
+            return SignInResult.Fail();
+        }
+
+        var policyError = await ValidateNewPasswordAsync(newPassword, identifier, cancellationToken)
+            .ConfigureAwait(false);
+        if (policyError is not null)
+            return SignInResult.Fail(policyError);
+
+        var now = _time.GetUtcNow();
+        credential.PasswordHash = _hasher.HashPassword(newPassword);
+        credential.UpdatedUtc = now;
+        await _credentials.UpsertAsync(credential, cancellationToken).ConfigureAwait(false);
+        await _sessions.RevokeAllForIdentityAsync(identity.Id, now, exceptSessionId: null, cancellationToken)
+            .ConfigureAwait(false);
+        await NotifyRevocationAsync(identity.Id, now, cancellationToken).ConfigureAwait(false);
+        await ObserveAsync(
+            AuthenticationEventTypes.PasswordChanged,
+            identity.Id,
+            "identifier",
+            null,
+            cancellationToken).ConfigureAwait(false);
+        return SignInResult.Success(identity.Id);
+    }
+
+    /// <inheritdoc />
     public async ValueTask RevokeGrantsAsync(
         IdentityId identityId,
         CancellationToken cancellationToken = default)
@@ -280,6 +314,55 @@ public sealed class AuthenticationService : IAuthenticationService
             return null;
 
         return session.IdentityId;
+    }
+
+    async ValueTask<string?> ValidateNewPasswordAsync(
+        string password,
+        string identifier,
+        CancellationToken cancellationToken)
+    {
+        var minimum = Math.Max(_options.MinimumPasswordLength, AbsoluteMinimumPasswordLength);
+        if (password.Length < minimum)
+            return "password_too_short";
+
+        if (ContainsForbiddenFragment(password, identifier))
+            return "password_forbidden";
+
+        if (_breachChecker is null)
+        {
+            if (!_options.IsDevelopment)
+                throw new InvalidOperationException(
+                    "IPasswordBreachChecker must be registered outside Development.");
+            return null;
+        }
+
+        bool breached;
+        try
+        {
+            breached = await _breachChecker.IsBreachedAsync(password, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return "password_check_unavailable";
+        }
+
+        return breached ? "password_breached" : null;
+    }
+
+    bool ContainsForbiddenFragment(string password, string identifier)
+    {
+        if (password.Contains(identifier.Trim(), StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        foreach (var fragment in _options.ForbiddenPasswordFragments)
+        {
+            if (!string.IsNullOrWhiteSpace(fragment)
+                && password.Contains(fragment.Trim(), StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     async ValueTask<SignInResult> FinishSignInAsync(

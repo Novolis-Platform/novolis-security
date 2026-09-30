@@ -2,13 +2,13 @@
 
 | Field | Value |
 | --- | --- |
-| Date | 2026-09-30 (MFA hook, failure counter, shared cache) |
-| Supersedes | Earlier 2026-09-30 remedy sheet that still treated MFA as a library gap and sign-in as having no failure counter |
+| Date | 2026-09-30 (logger sinks, idle timeout, grant revoke, live key rotate, form_post) |
+| Supersedes | Earlier 2026-09-30 sheet that still scored idle timeout, grant revoke, live rotation, form_post, and logging as Partial |
 | Target | `novolis-security` libraries: Authentication, OAuth, Authorization, password hashing, encryption, cryptography, secrets, HIBP, SecureText |
-| Version evaluated | Working tree on `main` after `IMfaProvider`, sign-in lockout, and `ICacheStore` as a product cache |
+| Version evaluated | Working tree on `main` after `ILogger` event sinks as default plus idle timeout, `RevokeGrantsAsync`, `SigningKeyRing.RotateAsync`, and `response_mode=form_post` |
 | Evaluator | Maintainer review plus the automated suites below |
 | Security check | **Passed** (selected ASVS 5.0.0 Level 2 library controls) |
-| Overall | MFA is a product plug-in (`IMfaProvider`, default `NoopMfaProvider`). Sign-in failures share a cache-backed counter and disable the credential when the budget is spent. `ICacheStore` is in-memory for tests and a single process; a farm replaces it with a distributed store. |
+| Overall | MFA is a product plug-in (`IMfaProvider`, default `NoopMfaProvider`). Sign-in failures share a cache-backed counter and disable the credential when the budget is spent. `ICacheStore` is in-memory for tests and a single process; a farm replaces it with a distributed store. Authentication and OAuth events default to `ILogger`. |
 
 This is a library evaluation, not a hosted-product pentest. TLS, edge WAF, key custody, and the concrete MFA method (TOTP, WebAuthn, SMS) live in the executable host.
 
@@ -62,7 +62,11 @@ The morning 2026-09-30 sheet is stale. The gaps it locked in as current behavior
 - Refresh rotation copies `FamilyExpiresUtc` from first issue and clamps `ExpiresUtc`. A refresh at or after the family cap is `invalid_grant`.
 - Token attempts are limited per `client_id` and per remote IP. `TrustForwardedFor` is false by default.
 - Issuance requires a DPoP ES256 proof (`typ` `dpop+jwt`) or an mTLS certificate thumbprint. Access tokens carry `cnf.jkt` or `cnf.x5t#S256`. `ValidateAsync` rejects a confirmation-bound token without a matching proof.
-- Outside Development, in-memory OAuth stores and `NoopEventStore` throw unless `AllowInMemoryStores` is set. `AddNovolisOAuthEvents` registers a delegate sink.
+- Authentication and OAuth event sinks default to `ILogger` (`LoggerAuthenticationEventSink`, `LoggerEventStore`). A missing `ILoggerFactory` uses `NullLogger`. `AddNovolisOAuthEvents` replaces the OAuth logger with a host delegate. Production still throws on `NoopEventStore` and in-memory stores unless `AllowInMemoryStores` is set.
+- Browser sessions have a 20-minute idle timeout (`SessionIdleTimeout`) on `ICacheStore` in addition to the 8-hour absolute lifetime.
+- `RevokeGrantsAsync` is the library API for “sign out everywhere”: it revokes every browser session and notifies `IIdentityRevocation` (refresh families and access-token not-before). Product UIs bind to it; this library does not ship a screen.
+- `SigningKeyRing.RotateAsync` installs a new ES384 current signer and keeps previous keys for validation and JWKS.
+- `/oauth/authorize` accepts `response_mode=form_post` (auto-submit POST of `code`/`state`). Default remains query redirect. Discovery lists `query` and `form_post`.
 
 What was already holding up is unchanged: Argon2id, AES-256-GCM, ES384-only JWT validation, exact redirect allow-list, S256 PKCE, credential/identity file isolation, default-deny tenant authorization.
 
@@ -92,11 +96,15 @@ Assumed host: HTTPS only, PEM supplied by the host, distributed `ICacheStore` wh
 | 6.2.8 | No truncation or case folding | **Pass** | Over-long passwords fail verify. NFC is applied on hash and verify. Case is preserved |
 | 6.2.9 | At least 64 characters permitted | **Pass** | `MaxPasswordLength` default 1024 |
 | 6.2.10 | No periodic password rotation | **Pass** | The library does not expire passwords |
-| 6.2.4 / 6.2.12 | Denylist and breached-password check | **Pass** | `IPasswordBreachChecker` is called on register. A missing checker throws outside Development. HIBP implements the checker in a separate assembly. Checker exceptions fail closed (`password_check_unavailable`) |
+| 6.2.4 / 6.2.12 | Denylist and breached-password check | **Pass** | `IPasswordBreachChecker` is called on register and password change. A missing checker throws outside Development. HIBP implements the checker in a separate assembly. Checker exceptions fail closed (`password_check_unavailable`) |
+| 6.2.2 / 6.2.3 | Users can change password with current and new | **Pass** | `ChangePasswordAsync` dummy-verifies the current password, applies the same policy as register, replaces the hash, and revokes sessions and OAuth grants |
+| 6.2.11 | Context-specific forbidden fragments | **Pass** | Identifier substring and `ForbiddenPasswordFragments` fail with `password_forbidden` |
 | 6.3.1 | Anti-automation | **Pass** | Token endpoint: 30 attempts / minute / `client_id` and the same window per IP. Sign-in: `MaxSignInFailures` (default 5) on `ICacheStore`; at the cap the credential is disabled and later attempts fail closed with dummy Argon2 |
 | 6.3.2 | No default accounts | **Pass** | No seeded root or admin credential |
 | 6.3.3 | MFA or combined factors | **Pass** | `IMfaProvider` after a correct password. Default `NoopMfaProvider` for tests and single-factor hosts. Products replace it and use `ICacheStore` for challenges. A host that keeps the no-op on the public internet is choosing not to enforce a second factor |
 | 6.3.4 | Consistent pathways | **Pass** | Password, implicit, and device grants are `unsupported_grant_type`. Public clients cannot use client credentials |
+| 6.4.2 | No password hints or secret questions | **Pass** | `CredentialRecord` and `IdentityRecord` have no hint or KBA fields |
+| 6.5.1 | MFA proofs one-time | **Pass** | Product `IMfaProvider` uses `ICacheStore.TryCreateAsync` so a proof cannot be replayed. Demonstrated by `SignIn_ProductMfa_RequiresProof_AndConsumesItOnce` |
 
 ### V7 — Session management
 
@@ -106,7 +114,7 @@ Assumed host: HTTPS only, PEM supplied by the host, distributed `ICacheStore` wh
 | 7.2.2 | Dynamic tokens | **Pass** | Sessions, codes, and refresh secrets are generated per issuance |
 | 7.2.3 | CSPRNG, at least 128 bits | **Pass** | Session id is 32 bytes from `RandomNumberGenerator` (asserted). Code and refresh secrets are 32 bytes |
 | 7.2.4 | New session on authentication, previous session terminated | **Pass** | A second sign-in returns a different session id. The first session no longer authenticates |
-| 7.3 | Timeouts | **Partial** | Session default 8 hours absolute. Access 15 minutes. Authorization code 2 minutes. Refresh family cap is `RefreshTokenLifetime` from first issue. No separate idle timeout |
+| 7.3 | Timeouts | **Pass** | Session default 8 hours absolute plus 20-minute idle (`SessionIdleTimeout` on `ICacheStore`, refreshed on each successful lookup). Access 15 minutes. Authorization code 2 minutes. Refresh family cap is `RefreshTokenLifetime` from first issue |
 | 7.4.1 | Logout blocks further use | **Pass** | `SignOutAsync` revokes that session id, every refresh family for the identity, and access tokens whose `iat` is at or before the identity cutoff |
 | 7.4.2 | Disable or delete ends sessions | **Pass** | `DisableAsync` sets `Disabled`, revokes every session, notifies revocation sinks. `GetAuthenticatedIdentityAsync` returns null. Authorization denies before role expansion. Code redemption is `invalid_grant` |
 
@@ -128,6 +136,7 @@ Assumed host: HTTPS only, PEM supplied by the host, distributed `ICacheStore` wh
 | 9.1.3 | Keys from the issuer, not `jku` / `jwk` | **Pass** | Validation uses the process key ring |
 | 9.2.1 | `nbf` and `exp` | **Pass** | Both required. Default clock skew 30 seconds. Identity not-before is an extra cutoff |
 | 9.2.3 | Audience allow-list | **Pass** | `aud` must match `OAuthOptions.Audiences` |
+| 9.2.2 | Token type and purpose | **Pass** | Access tokens use `typ` `at+jwt`. `ValidateAsync` rejects other types. DPoP proofs require `typ` `dpop+jwt` |
 
 ### V10 — OAuth and OIDC
 
@@ -141,10 +150,11 @@ Assumed host: HTTPS only, PEM supplied by the host, distributed `ICacheStore` wh
 | 10.4.6 | PKCE S256, reject `plain` | **Pass** | Missing or `plain` challenges fail. The token request requires `code_verifier` |
 | 10.4.7 | Dynamic client registration | **N/A** | Not implemented |
 | 10.4.8 | Absolute refresh expiration | **Pass** | `FamilyExpiresUtc` is set at first issue to `now + RefreshTokenLifetime`, copied on rotation, and clamps `ExpiresUtc`. A refresh at or after the cap is `invalid_grant` |
-| 10.4.9 | User can revoke refresh tokens | **Partial** | `/oauth/revoke` revokes the family after client authentication. Sign-out and disable revoke every family for the identity. There is no end-user UI in this library |
+| 10.4.9 | User can revoke refresh tokens | **Pass** | `/oauth/revoke` revokes the family after client authentication. `SignOutAsync`, `DisableAsync`, and `RevokeGrantsAsync` revoke every family for the identity and write an access-token not-before. Product UIs bind “sign out everywhere” to `RevokeGrantsAsync`; this library does not ship a screen |
 | 10.4.10 | Confidential client authentication | **Pass** | Secret required. Basic and form `client_id` mismatch is `invalid_client`. Unknown and bad secrets share that error. A public client that presents a secret is rejected |
 | 10.2.1 | PKCE or `state` against CSRF | **Pass** | PKCE S256 is mandatory. `state` is echoed when present and is not required |
 | 10.4.14 | Sender-constrained access tokens | **Pass** | DPoP ES256 proofs or `cnf.x5t#S256` from a client certificate. Issuance with neither fails. `ValidateAsync` requires a matching proof and `ath`. Mismatch and missing proof fail |
+| 10.3 | Resource server uses token claims | **Pass** | `ValidateAsync` requires `aud`, exposes `sub`, `scope`, and `client_id`, and requires a matching DPoP or certificate confirmation |
 
 OIDC client and identity-provider sections are **N/A**. Discovery does not advertise a userinfo endpoint, and `/.well-known/openid-configuration` is absent unless the host opts into the alias.
 
@@ -157,7 +167,7 @@ OIDC client and identity-provider sections are **N/A**. Discovery does not adver
 | 11.4 | Password hashing | **Pass** | Argon2id PHC. No MD5 or SHA-1 password storage. Verify refuses oversized `m` / `t` / `p` |
 | 11.4 | Client secrets | **Pass** | PBKDF2-HMAC-SHA512, 210000 iterations, 16-byte salt, fixed-time compare |
 | 11.5.1 | CSPRNG for non-guessable values | **Pass** | `RandomNumberGenerator` via `SecureRandom`. Not `System.Random` |
-| 11.2 | Key inventory and agility | **Partial** | Algorithms are explicit. The host supplies PEM. Live in-process signing-key rotation is not implemented. Ephemeral P-384 is refused outside Development |
+| 11.2 | Key inventory and agility | **Pass** | Algorithms are explicit. The host supplies PEM. `SigningKeyRing.RotateAsync` installs a new current signer and keeps previous keys for validation and JWKS. Ephemeral P-384 is refused outside Development |
 
 HIBP uses SHA-1 because the Pwned Passwords range API defines the prefix that way. That hash is not a password store.
 
@@ -167,7 +177,7 @@ SecureText derives a pairwise AES-256 key with P-256 ECDH and HKDF-SHA256. Bundl
 
 | ID | Control | Score | Evidence |
 | --- | --- | --- | --- |
-| 14.2.1 | Secrets not in the query string | **Partial** | The token endpoint is POST form only. The authorization response places the one-time code in the redirect query, which is what the authorization-code grant specifies. GET `/oauth/token` is 405 |
+| 14.2.1 | Secrets not in the query string | **Pass** | The token endpoint is POST form only. GET `/oauth/token` is 405. Authorization default is query (RFC 6749). `response_mode=form_post` returns an auto-submit POST of `code`/`state`. Discovery lists `query` and `form_post` |
 | 14.2.2 | Sensitive responses not cached | **Pass** | Token and revoke responses set `Cache-Control: no-store` and `Pragma: no-cache` |
 | 14.2.6 | Minimum data | **Pass** | Credential row is reference, hash, disabled, timestamps. Identity row holds the email and no password hash. JSON files do not combine the two |
 
@@ -176,7 +186,9 @@ SecureText derives a pairwise AES-256 key with P-256 ECDH and HKDF-SHA256. Bundl
 | ID | Control | Score | Evidence |
 | --- | --- | --- | --- |
 | 16.2.5 | No credentials in logs | **Pass** | Security events carry type, client id, identity id, grant, and error. They do not carry passwords, refresh secrets, or PEMs |
-| 16.3.1 | Authentication outcomes logged | **Partial** | Events are recorded when a sink is registered. Production refuses `NoopEventStore` unless `AllowInMemoryStores`. `AddNovolisOAuthEvents` registers a delegate |
+| 16.3.1 | Authentication outcomes logged | **Pass** | Default sinks are `LoggerAuthenticationEventSink` and `LoggerEventStore` (`ILogger`). Payloads are type, client id, identity id, grant, and error. A missing logger factory uses `NullLogger`. Production still refuses an explicit `NoopEventStore` unless `AllowInMemoryStores` |
+| 16.3.2 | Failed authorization attempts logged | **Pass** | Default `LoggerAuthorizationEventSink`. Denies record type, tenant, identity, and permission id |
+| 16.5.1 | Generic errors | **Pass** | Token errors are JSON `error` codes. They do not include stack traces, PEMs, or secrets |
 
 ## 6. OWASP API Security Top 10 (2023)
 
@@ -191,7 +203,7 @@ SecureText derives a pairwise AES-256 key with P-256 ECDH and HKDF-SHA256. Bundl
 | API7 | SSRF | **Pass** | No URL fetch from client input. `jku` is not followed |
 | API8 | Security misconfiguration | **Pass** | Ephemeral signing keys are Development-only. In-memory stores and the no-op sink throw outside Development unless `AllowInMemoryStores` |
 | API9 | Improper inventory | **Pass** | Discovery lists authorization code, client credentials, refresh, `code`, and S256. It is not an OpenID Provider |
-| API10 | Unsafe API consumption | **Partial** | HIBP uses k-anonymity. The host must pin `https://api.pwnedpasswords.com` |
+| API10 | Unsafe API consumption | **Pass** | HIBP uses k-anonymity. Range lookups throw unless the origin is `https://api.pwnedpasswords.com` |
 
 ## 7. Cheat sheets and RFC 9700
 
@@ -226,7 +238,7 @@ SecureText derives a pairwise AES-256 key with P-256 ECDH and HKDF-SHA256. Bundl
 | --- | --- |
 | F-03 IP attempt limit | **Closed.** `oauth:rate:ip:{address}` uses the same window as the client-id counter. `TrustForwardedFor` is false by default; when set, only the left-most `X-Forwarded-For` is used |
 | F-07 sender-constrained tokens | **Closed.** DPoP ES256 subset of RFC 9449, or `cnf.x5t#S256` from a client certificate. Stolen bearer use without the proof fails |
-| F-08 in-memory production stores | **Closed.** Outside Development, process-local cache (`IsProcessLocal`) / in-memory client/code/refresh stores or `NoopEventStore` throw unless `AllowInMemoryStores` |
+| F-08 in-memory production stores | **Closed.** Outside Development, process-local cache (`IsProcessLocal`) / in-memory client/code/refresh stores or an explicit `NoopEventStore` throw unless `AllowInMemoryStores`. The default event sink is `ILogger`, not no-op |
 | F-11 registration policy | **Closed.** 8-character floor and `IPasswordBreachChecker`. Authentication does not reference HaveIBeenPwned |
 | F-12 sessions and disable | **Closed.** Sign-in revokes other sessions. `DisableAsync` revokes sessions and sinks. Authorization denies disabled identities. A missing identity record still authorizes from roles |
 | F-13 sign-out tokens | **Closed.** `IIdentityRevocation` revokes refresh families and writes an identity not-before. Client-credentials tokens whose subject is the client id are unchanged |
@@ -251,8 +263,11 @@ Reference host: `tests/Novolis.Security.OAuth.Integration/ReferenceIdentityHost.
 | Check | Where |
 | --- | --- |
 | JSON and SQLite: isolated credential file, 256-bit session, short-password reject, session replace, DPoP-bound code + S256, replay invalidates access token, sign-out invalidates JWT, disable vs redeem and authorization | `OwaspReferenceScenarioTests` |
-| Open redirect, prefix and query redirect, implicit `response_type`, optional `state`, GET token 405, no-store, Host header, per-client and per-IP rate limit, production in-memory guard, DPoP mismatch | `OwaspHttpScenarioTests` |
-| Short password, breached password, failure lockout, product MFA one-time proof | `AuthenticationIsolationTests` |
+| Short password, breached password, failure lockout, product MFA, logger defaults, idle timeout, `RevokeGrantsAsync`, password change, forbidden fragments, no KBA fields, production breach-checker guard | `AuthenticationIsolationTests` |
+| Live signing-key rotate keeps previous `kid` valid; `RevokeGrantsAsync` invalidates access and refresh; `typ` `at+jwt`; resource-server `sub`/`scope`/`aud` | `OAuthTokenServiceTests` |
+| Open redirect, prefix and query redirect, implicit `response_type`, optional `state`, `form_post` encoding, GET token 405, generic token errors, no-store, Host header, per-client and per-IP rate limit, production in-memory guard, DPoP mismatch | `OwaspHttpScenarioTests` |
+| Denied authorization is recorded; default authorization sink is `ILogger` | `AuthorizationEngineTests` |
+| Pwned Passwords origin pin | `HaveIBeenPwnedClientTest` |
 | Refresh family absolute cap | `OAuthTokenServiceTests` |
 | Authentication does not reference HIBP; OAuth and Authorization do not reference each other | `SecurityArchitectureTests` |
 | `alg=none`, HS256, concurrent refresh | `OAuthRedTeamTests` |
@@ -267,7 +282,7 @@ Reference host: `tests/Novolis.Security.OAuth.Integration/ReferenceIdentityHost.
 3. Provide a P-384 PKCS#8 PEM. Do not set `AllowEphemeralSigningKey` outside Development.
 4. Replace in-memory stores. JSON and SQLite both complete the reference scenario. Do not set `AllowInMemoryStores` in production.
 5. Call `AddNovolisPasswordBreachCheck()` (or another `IPasswordBreachChecker`) outside Development.
-6. Call `AddNovolisOAuthEvents` (or another `IEventStore`) so production is not stuck on the no-op sink.
+6. Keep the default `ILogger` sinks, or call `AddNovolisOAuthEvents` (or another `IEventStore`) if the host wants a custom observer. Do not register `NoopEventStore` in production.
 7. Keep the identifier directory off the credential records.
 8. Put a trusted reverse proxy in front if you set `TrustForwardedFor`. The library uses only the left-most `X-Forwarded-For` value.
 9. Keep in-memory `ICacheStore` for tests and a single process. Replace it with a distributed cache before more than one process, pod, or app shares lockout, MFA, or OAuth leases.
@@ -293,7 +308,7 @@ Reference host: `tests/Novolis.Security.OAuth.Integration/ReferenceIdentityHost.
 | SQLite as a client store | Pass |
 | Fit as an OpenID Provider | No |
 
-**Security check: Passed.** Selected ASVS 5.0.0 Level 2 library controls for this identity core are met. A hosted product still needs TLS, a distributed cache when it scales out, a registered breach checker plus event sink outside Development, and a real `IMfaProvider` when a second factor is required.
+**Security check: Passed.** Selected ASVS 5.0.0 Level 2 library controls for this identity core are met. A hosted product still needs TLS, a distributed cache when it scales out, a registered breach checker outside Development, and a real `IMfaProvider` when a second factor is required. Event sinks already default to `ILogger`.
 
 Re-run:
 
@@ -302,7 +317,7 @@ dotnet test d:\novolis\novolis-security\tests\Novolis.Security.Unit\Novolis.Secu
 dotnet test d:\novolis\novolis-security\tests\Novolis.Security.OAuth.Integration\Novolis.Security.OAuth.Integration.csproj -p:NovolisUseProjectReferences=true
 ```
 
-Unit: 78 passed, 1 skipped network check. Integration: 4 passed.
+Unit: 95 passed, 1 skipped network check. Integration: 4 passed.
 
 ## 12. References
 

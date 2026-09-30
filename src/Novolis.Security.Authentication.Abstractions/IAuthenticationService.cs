@@ -47,4 +47,14 @@ public interface IAuthenticationService
     ValueTask DisableAsync(
         IdentityId identityId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Replaces the credential hash after verifying the current password.
+    /// The new password is subject to the same length, denylist, and breach checks as registration.
+    /// </summary>
+    ValueTask<SignInResult> ChangePasswordAsync(
+        string identifier,
+        string currentPassword,
+        string newPassword,
+        CancellationToken cancellationToken = default);
 }

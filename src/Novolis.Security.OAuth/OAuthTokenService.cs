@@ -248,6 +248,9 @@ public sealed class OAuthTokenService : ITokenService
         if (!validated.IsValid || validated.SecurityToken is not JsonWebToken jwt)
             return validated;
 
+        if (!string.Equals(jwt.Typ, "at+jwt", StringComparison.OrdinalIgnoreCase))
+            return Invalid("Access token type is invalid.");
+
         if (await _cache.GetAsync("oauth:deny-jti:" + jwt.Id, cancellationToken).ConfigureAwait(false) > 0)
             return Invalid("Token has been revoked.");
 
@@ -587,6 +590,7 @@ public sealed class OAuthTokenService : ITokenService
             NotBefore = now.UtcDateTime,
             Expires = (now + _options.AccessTokenLifetime).UtcDateTime,
             SigningCredentials = _keys.GetSigningCredentials(),
+            TokenType = "at+jwt",
         };
         return (_handler.CreateToken(descriptor), jti);
     }

@@ -29,4 +29,7 @@ public static class AuthenticationEventTypes
 
     /// <summary>An identity was disabled.</summary>
     public const string IdentityDisabled = "identity_disabled";
+
+    /// <summary>The credential hash was replaced after a verified current password.</summary>
+    public const string PasswordChanged = "password_changed";
 }

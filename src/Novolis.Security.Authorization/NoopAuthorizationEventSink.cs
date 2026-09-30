@@ -1,6 +1,6 @@
 namespace Novolis.Security.Authorization;
 
-/// <summary>Default authorization event sink.</summary>
+/// <summary>Explicit no-op authorization event sink. The library default is <c>LoggerAuthorizationEventSink</c>.</summary>
 public sealed class NoopAuthorizationEventSink : IAuthorizationEventSink
 {
     /// <summary>Shared instance.</summary>

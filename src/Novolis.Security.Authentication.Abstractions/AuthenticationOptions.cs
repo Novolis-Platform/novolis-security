@@ -21,6 +21,12 @@ public sealed class AuthenticationOptions
     public TimeSpan SessionIdleTimeout { get; set; } = TimeSpan.FromMinutes(20);
 
     /// <summary>
+    /// Substrings that must not appear in a new password, compared without regard to case.
+    /// Hosts add product and organization names (ASVS 6.2.11). The identifier is always forbidden as well.
+    /// </summary>
+    public string[] ForbiddenPasswordFragments { get; set; } = [];
+
+    /// <summary>
     /// Failed sign-in attempts against one credential before it is disabled.
     /// The count lives in <see cref="ICacheStore"/> so a farm shares the same window.
     /// </summary>

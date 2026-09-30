@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Novolis.Security.Authentication;
 using Novolis.Security.OAuth;
@@ -275,6 +276,127 @@ public class OAuthTokenServiceTests
             RefreshToken = first.RefreshToken,
         }));
         await Assert.That(expired.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
+    }
+
+    [Test]
+    public async Task RevokeGrants_InvalidatesAccessAndRefresh()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var (identityId, sessionId) = await OAuthTestHost.SeedIdentityAsync(provider);
+        var authentication = provider.GetRequiredService<IAuthenticationService>();
+        var tokens = provider.GetRequiredService<OAuthTokenService>();
+        var issued = await RedeemAsync(provider, tokens, identityId);
+        await Assert.That(
+                (await tokens.ValidateAsync(issued.AccessToken!, Proofs.Resource(issued.AccessToken!))).IsValid)
+            .IsTrue();
+
+        await authentication.RevokeGrantsAsync(identityId);
+        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(sessionId)).IsNull();
+        await Assert.That(
+                (await tokens.ValidateAsync(issued.AccessToken!, Proofs.Resource(issued.AccessToken!))).IsValid)
+            .IsFalse();
+        var refresh = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.RefreshToken,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            RefreshToken = issued.RefreshToken,
+        }));
+        await Assert.That(refresh.Error).IsEqualTo(OAuthTokenErrors.InvalidGrant);
+    }
+
+    [Test]
+    public async Task SigningKeyRing_Rotate_KeepsPreviousKeyForValidation()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var tokens = provider.GetRequiredService<OAuthTokenService>();
+        var ring = provider.GetRequiredService<SigningKeyRing>();
+        var first = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.ClientCredentials,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            Scope = "game",
+        }));
+        await Assert.That(first.Succeeded).IsTrue();
+        var firstKid = new JsonWebToken(first.AccessToken!).Kid;
+
+        using var next = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        await ring.RotateAsync(next.ExportPkcs8PrivateKeyPem());
+
+        var second = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.ClientCredentials,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            Scope = "game",
+        }));
+        await Assert.That(second.Succeeded).IsTrue();
+        var secondKid = new JsonWebToken(second.AccessToken!).Kid;
+        await Assert.That(secondKid).IsNotEqualTo(firstKid);
+        await Assert.That(
+                (await tokens.ValidateAsync(first.AccessToken!, Proofs.Resource(first.AccessToken!))).IsValid)
+            .IsTrue();
+        await Assert.That(
+                (await tokens.ValidateAsync(second.AccessToken!, Proofs.Resource(second.AccessToken!))).IsValid)
+            .IsTrue();
+    }
+
+    [Test]
+    public async Task AccessToken_HasAtJwtTyp_AndRejectsDpopProofAsAccessToken()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var tokens = provider.GetRequiredService<OAuthTokenService>();
+        var issued = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.ClientCredentials,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            Scope = "game",
+        }));
+        await Assert.That(issued.Succeeded).IsTrue();
+        var access = new JsonWebToken(issued.AccessToken!);
+        await Assert.That(access.Typ).IsEqualTo("at+jwt");
+        var proof = Proofs.Create();
+        var dpop = new JsonWebToken(proof);
+        await Assert.That(dpop.Typ).IsEqualTo("dpop+jwt");
+        await Assert.That(dpop.TryGetPayloadValue("nonce", out string? nonce) && nonce is not null).IsFalse();
+        await Assert.That((await tokens.ValidateAsync(proof, Proofs.Resource(issued.AccessToken!))).IsValid).IsFalse();
+        var asProof = await tokens.ValidateAsync(
+            issued.AccessToken!,
+            new TokenProofContext
+            {
+                DPoPProof = issued.AccessToken,
+                HttpMethod = "GET",
+                HttpUri = DPoPProofFactory.ResourceUri,
+            });
+        await Assert.That(asProof.IsValid).IsFalse();
+    }
+
+    [Test]
+    public async Task ResourceServer_ValidateAsync_RequiresAudience_AndExposesSubScopeClient()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        await OAuthTestHost.SeedConfidentialClientAsync(provider);
+        var tokens = provider.GetRequiredService<OAuthTokenService>();
+        var issued = await tokens.IssueAsync(Proofs.Bind(new TokenIssueRequest
+        {
+            GrantType = OAuthGrantTypes.ClientCredentials,
+            ClientId = "space-game-web",
+            ClientSecret = "client-secret",
+            Scope = "game",
+            Audience = "space-game-api",
+        }));
+        await Assert.That(issued.Succeeded).IsTrue();
+        var validated = await tokens.ValidateAsync(issued.AccessToken!, Proofs.Resource(issued.AccessToken!));
+        await Assert.That(validated.IsValid).IsTrue();
+        await Assert.That(validated.ClaimsIdentity?.FindFirst("sub")?.Value).IsEqualTo("space-game-web");
+        await Assert.That(validated.ClaimsIdentity?.FindFirst("scope")?.Value).IsEqualTo("game");
+        await Assert.That(validated.ClaimsIdentity?.FindFirst("client_id")?.Value).IsEqualTo("space-game-web");
+        await Assert.That(new JsonWebToken(issued.AccessToken!).Audiences.Contains("space-game-api")).IsTrue();
     }
 
     static async Task<string> IssueCodeAsync(OAuthTokenService tokens, IdentityId identityId, string challenge)

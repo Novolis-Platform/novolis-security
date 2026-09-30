@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -169,7 +170,16 @@ public sealed class SigningKeyRing
                 Id = Guid.NewGuid(),
                 Kid = next.KeyId ?? "",
                 Alg = SecurityAlgorithms.EcdsaSha384,
-                PublicJwk = jwk.ToString(),
+                PublicJwk = JsonSerializer.Serialize(new Dictionary<string, string?>
+                {
+                    ["kty"] = jwk.Kty,
+                    ["crv"] = jwk.Crv,
+                    ["x"] = jwk.X,
+                    ["y"] = jwk.Y,
+                    ["kid"] = jwk.Kid ?? next.KeyId,
+                    ["use"] = "sig",
+                    ["alg"] = SecurityAlgorithms.EcdsaSha384,
+                }),
                 PrivatePem = pem,
                 CreatedUtc = now,
                 Enabled = true,
