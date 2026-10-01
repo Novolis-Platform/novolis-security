@@ -1,9 +1,7 @@
 <!-- novolis-pkg-brand:start -->
-<p align="center">
-  <a href="https://github.com/Novolis-Platform/novolis-security">
-    <img src="https://raw.githubusercontent.com/Novolis-Platform/.github/main/brand/logo-icon.svg" width="72" alt="Novolis"/>
-  </a>
-</p>
+[![Novolis](https://raw.githubusercontent.com/Novolis-Platform/.github/main/brand/logo-icon.png)](https://novolis-platform.github.io/.github/novolis-security/)
+
+[Novolis](https://github.com/Novolis-Platform) · [Docs](https://novolis-platform.github.io/.github/novolis-security/) · [Source](https://github.com/Novolis-Platform/novolis-security)
 <!-- novolis-pkg-brand:end -->
 
 # Novolis.Security.Authorization
