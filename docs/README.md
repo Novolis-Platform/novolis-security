@@ -21,6 +21,7 @@ Published docs: [https://novolis-platform.github.io/.github/novolis-security/](h
 | `Novolis.Security.Cryptography` | Helpers |
 | `Novolis.Security.Encryption` | Helpers |
 | `Novolis.Security.HaveIBeenPwned` | Helpers |
+| `Novolis.Security.OAuth.Client` | Outbound Novolis-issuer caller |
 | `Novolis.Security.PasswordHashing` | Helpers |
 | `Novolis.Security.Secrets` / `SecureText` | Helpers |
 | `Novolis.Security.Authentication.*` | Application sign-in (not an IdP) |

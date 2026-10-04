@@ -1,6 +1,6 @@
 # Getting started
 
-Password hashing (Argon2id), AES-256-GCM encryption, HaveIBeenPwned helpers, plus an **access-token mint** (`Novolis.Security.OAuth`) and a **tenant authorization framework** (`Novolis.Security.Authorization`).
+Password hashing (Argon2id), AES-256-GCM encryption, HaveIBeenPwned helpers, plus an **access-token mint** (`Novolis.Security.OAuth`), an outbound Novolis-issuer caller (`Novolis.Security.OAuth.Client`), and a **tenant authorization framework** (`Novolis.Security.Authorization`).
 
 This is **not** a full Identity Provider and **not** a substitute for Duende IdentityServer, Keycloak, or Entra. Read [what-this-is.md](what-this-is.md) first.
 

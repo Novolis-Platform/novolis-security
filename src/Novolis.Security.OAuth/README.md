@@ -31,6 +31,8 @@ services.AddNovolisOAuth(o =>
 
 Password grant is not supported.
 
+Outbound API calls against this mint use `Novolis.Security.OAuth.Client` (`AddNovolisOAuthClient<TApi>`). This package does not send HTTP.
+
 ## Support
 
 Pre-release (`2026.1.*` on GitHub Packages).

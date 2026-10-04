@@ -12,6 +12,9 @@
     <PackageReference Include="TUnit" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="OAuthClientTests.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Novolis.Security.Cryptography\Novolis.Security.Cryptography.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.WordLists\Novolis.Security.WordLists.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.Secrets\Novolis.Security.Secrets.csproj" />

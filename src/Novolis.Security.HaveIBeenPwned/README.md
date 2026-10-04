@@ -21,7 +21,10 @@ dotnet add package Novolis.Security.HaveIBeenPwned
 ```csharp
 using Novolis.Security.HaveIBeenPwned;
 
-// Register IHaveIBeenPwnedClient with IHttpClientFactory + IOptions<HibpConfiguration> in DI.
+services.AddNovolisPasswordBreachCheck();
+// Or: services.AddNovolisPwnedPasswordsClient();
+// Range lookups use the pinned PwnedPasswordsApi named client.
+
 bool pwned = await client.IsPwnedAsync("password123", threshold: 1);
 
 IEnumerable<PasswordDetails> details =

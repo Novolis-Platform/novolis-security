@@ -9,7 +9,7 @@ public class HibpConfiguration
     /// <summary>Base URI for the HIBP REST API.</summary>
     public Uri BaseAddress { get; set; } = new Uri("https://haveibeenpwned.com/api/v3");
 
-    /// <summary>Pwned Passwords range origin. Must stay on https://api.pwnedpasswords.com.</summary>
+    /// <summary>Unused for range lookups. The named <see cref="PwnedPasswordsApi"/> client is pinned to api.pwnedpasswords.com.</summary>
     public Uri PwnedPasswordAddress { get; set; } = new Uri("https://api.pwnedpasswords.com/range");
 
     /// <summary>Application name sent in API requests.</summary>

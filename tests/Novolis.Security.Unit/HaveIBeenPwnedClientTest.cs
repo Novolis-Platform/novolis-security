@@ -13,25 +13,22 @@ public class HaveIBeenPwnedClientTest
     {
         var services = new ServiceCollection();
         services.AddLogging(b => b.SetMinimumLevel(LogLevel.Debug));
-        services.AddHttpClient();
-        services.Configure<HibpConfiguration>(o => o.PwnedPasswordAddress = new Uri("https://api.pwnedpasswords.com/range"));
+        services.AddNovolisPwnedPasswordsClient();
         services.AddSingleton<IHaveIBeenPwnedClient, HaveIBeenPwnedClient>();
         return services.BuildServiceProvider();
     }
 
     [Test]
-    public async Task RangeLookup_RefusesUnpinnedOrigins()
+    public async Task AddNovolisPwnedPasswordsClient_pins_the_range_origin()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddHttpClient();
-        services.Configure<HibpConfiguration>(o =>
-            o.PwnedPasswordAddress = new Uri("https://evil.example/range"));
-        services.AddSingleton<IHaveIBeenPwnedClient, HaveIBeenPwnedClient>();
+        services.AddNovolisPwnedPasswordsClient();
         await using var provider = services.BuildServiceProvider();
-        var client = provider.GetRequiredService<IHaveIBeenPwnedClient>();
-        await Assert.That(async () => await client.IsPwnedAsync("password"))
-            .Throws<InvalidOperationException>();
+        var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(PwnedPasswordsApi.HttpClientName);
+        await Assert.That(client.BaseAddress!.Scheme).IsEqualTo("https");
+        await Assert.That(client.BaseAddress.Host).IsEqualTo(HaveIBeenPwnedClient.AllowedPwnedPasswordsHost);
+        await Assert.That(client.DefaultRequestHeaders.Contains("Add-Padding")).IsTrue();
     }
 
     [Test]
