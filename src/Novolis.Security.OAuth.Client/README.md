@@ -36,7 +36,7 @@ public sealed class WarehouseCaller(INovolisOAuthClient<WarehouseApi> api)
 }
 ```
 
-A DPoP client uses `ClientCredentialsCredential.DPoP` and has no secret parameter. Refresh uses `AddNovolisOAuthClient<TApi, TStore>` after `TStore` is already registered.
+A DPoP client uses `ClientCredentialsCredential.DPoP` and has no secret parameter. Refresh uses `AddNovolisOAuthClient<TApi, TStore>` after `TStore` is already registered. Each resource client binds its own store.
 
 The registration returns `IServiceCollection`. It does not return `IHttpClientBuilder`.
 

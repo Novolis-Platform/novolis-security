@@ -56,15 +56,16 @@ internal sealed class NovolisOAuthDiscovery(IHttpClientFactory httpClientFactory
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
-        if (options.TokenEndpoint is not null)
+        try
         {
-            return new Uri(options.Issuer.ToString().TrimEnd('/') + "/oauth/revoke");
+            var document = await GetAsync(options.Issuer, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(document.RevocationEndpoint))
+            {
+                return new Uri(document.RevocationEndpoint);
+            }
         }
-
-        var document = await GetAsync(options.Issuer, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(document.RevocationEndpoint))
+        catch (Exception) when (options.TokenEndpoint is not null)
         {
-            return new Uri(document.RevocationEndpoint);
         }
 
         return new Uri(options.Issuer.ToString().TrimEnd('/') + "/oauth/revoke");

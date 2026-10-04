@@ -34,22 +34,14 @@ public class HaveIBeenPwnedClient(IHttpClientFactory clientFactory, ILogger<Have
     private async Task<IEnumerable<PasswordDetails>> GetPasswordDetailsAsync(Sha1Hash hash)
     {
         var client = clientFactory.CreateClient(PwnedPasswordsApi.HttpClientName);
-        EnsurePinnedRangeOrigin(client.BaseAddress);
-        var response = await client.GetStringAsync(hash.Prefix);
-        var parsedResponse = ParseResponse(response).ToArray();
+        PwnedPasswordsOrigin.EnsurePinned(client.BaseAddress);
+        using var response = await client.GetAsync(hash.Prefix);
+        response.EnsureSuccessStatusCode();
+        PwnedPasswordsOrigin.EnsurePinned(response.RequestMessage?.RequestUri);
+        var body = await response.Content.ReadAsStringAsync();
+        var parsedResponse = ParseResponse(body).ToArray();
         logger.LogDebug("Pwned Passwords range lookup completed with {SuffixCount} suffixes.", parsedResponse.Length);
         return parsedResponse.Select(pair => CreatePassword(pair, hash.Prefix));
-    }
-
-    static void EnsurePinnedRangeOrigin(Uri? address)
-    {
-        ArgumentNullException.ThrowIfNull(address);
-        if (!string.Equals(address.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(address.Host, AllowedPwnedPasswordsHost, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                "Pwned Passwords requests must use https://" + AllowedPwnedPasswordsHost + ".");
-        }
     }
 
     private static PasswordDetails CreatePassword(KeyValuePair<string, uint?> pair, string prefix)

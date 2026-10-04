@@ -9,5 +9,6 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <ProjectReference Include="..\Novolis.Security.Authentication.Abstractions\Novolis.Security.Authentication.Abstractions.csproj" />
+    <InternalsVisibleTo Include="Novolis.Security.Unit" />
   </ItemGroup>
 </Project>

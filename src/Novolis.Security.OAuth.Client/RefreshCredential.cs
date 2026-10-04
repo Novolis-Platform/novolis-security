@@ -83,7 +83,7 @@ public sealed class RefreshCredential
             clientId,
             scope,
             clientSecret: null,
-            dPoPSigningKey,
+            DPoPSigningKeys.RequireP256(dPoPSigningKey),
             tokenEndpoint);
     }
 }

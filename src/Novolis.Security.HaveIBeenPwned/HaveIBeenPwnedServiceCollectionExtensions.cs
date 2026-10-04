@@ -17,7 +17,9 @@ public static class HaveIBeenPwnedServiceCollectionExtensions
         {
             client.BaseAddress = new Uri("https://api.pwnedpasswords.com/range/");
             client.DefaultRequestHeaders.TryAddWithoutValidation("Add-Padding", "true");
-        });
+        })
+        .ConfigurePrimaryHttpMessageHandler(PwnedPasswordsOrigin.CreatePrimaryHandler)
+        .AddHttpMessageHandler(() => new PwnedPasswordsPinHandler());
         return services;
     }
 

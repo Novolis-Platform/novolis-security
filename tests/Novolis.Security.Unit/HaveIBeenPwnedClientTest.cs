@@ -29,6 +29,23 @@ public class HaveIBeenPwnedClientTest
         await Assert.That(client.BaseAddress!.Scheme).IsEqualTo("https");
         await Assert.That(client.BaseAddress.Host).IsEqualTo(HaveIBeenPwnedClient.AllowedPwnedPasswordsHost);
         await Assert.That(client.DefaultRequestHeaders.Contains("Add-Padding")).IsTrue();
+        var primary = PwnedPasswordsOrigin.CreatePrimaryHandler();
+        await Assert.That(primary).IsTypeOf<HttpClientHandler>();
+        await Assert.That(((HttpClientHandler)primary).AllowAutoRedirect).IsFalse();
+    }
+
+    [Test]
+    public async Task Pin_handler_rejects_a_foreign_host()
+    {
+        using var handler = new PwnedPasswordsPinHandler
+        {
+            InnerHandler = new HttpClientHandler(),
+        };
+        using var client = new HttpClient(handler);
+        var thrown = await Assert.That(async () =>
+            await client.GetAsync("https://evil.example/range/ABCDE"))
+            .Throws<InvalidOperationException>();
+        await Assert.That(thrown!.Message).Contains(HaveIBeenPwnedClient.AllowedPwnedPasswordsHost);
     }
 
     [Test]

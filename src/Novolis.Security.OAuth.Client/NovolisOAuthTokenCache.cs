@@ -31,7 +31,10 @@ internal sealed class NovolisOAuthTokenCache(IMemoryCache cache, TimeProvider ti
         ArgumentException.ThrowIfNullOrWhiteSpace(clientName);
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheKey);
         ArgumentNullException.ThrowIfNull(token);
-        cache.Set(cacheKey, token);
+        cache.Set(cacheKey, token, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpiration = token.ExpiresAt,
+        });
         _keysByClient.GetOrAdd(clientName, static _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal))
             .TryAdd(cacheKey, 0);
     }

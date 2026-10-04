@@ -36,7 +36,7 @@ Follow [library-boundaries](https://github.com/Novolis-Platform/novolis-governan
 - `Novolis.Security.Secrets`
 - `Novolis.Security.Authentication.*`
 - `Novolis.Security.OAuth.*`
-- `Novolis.Security.OAuth.Client` — outbound Novolis-issuer caller. One `AddNovolisOAuthClient<TApi>` registration per legal credential. Inject `INovolisOAuthClient<TApi>`. Does not wrap `Novolis.Http.Authentication`.
+- `Novolis.Security.OAuth.Client` — outbound Novolis-issuer caller. One `AddNovolisOAuthClient<TApi>` registration per legal credential. Inject `INovolisOAuthClient<TApi>`. Refresh binds `TStore` to that client. Does not wrap `Novolis.Http.Authentication`.
 - `Novolis.Security.Authorization.*`
 
 ## Credential store isolation

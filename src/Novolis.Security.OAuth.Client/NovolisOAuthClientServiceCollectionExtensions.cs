@@ -24,6 +24,7 @@ public static class NovolisOAuthClientServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(credential);
+        EnsureClientKey<TApi>();
         ValidateAddresses(baseAddress, credential.Issuer, credential.TokenEndpoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(credential.ClientId);
         ArgumentException.ThrowIfNullOrWhiteSpace(credential.Scope);
@@ -63,18 +64,20 @@ public static class NovolisOAuthClientServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(credential);
+        EnsureClientKey<TApi>();
         ValidateAddresses(baseAddress, credential.Issuer, credential.TokenEndpoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(credential.ClientId);
         ArgumentException.ThrowIfNullOrWhiteSpace(credential.Scope);
-        if (!services.Any(descriptor => descriptor.ServiceType == typeof(TStore)))
+        if (!IsStoreRegistered<TStore>(services))
         {
             throw new InvalidOperationException(
                 $"{typeof(TStore).Name} must be registered before AddNovolisOAuthClient<{typeof(TApi).Name}, {typeof(TStore).Name}>().");
         }
 
         AddSharedServices(services, primaryHandler);
-        services.TryAddSingleton<IRotatedRefreshTokenStore>(provider => provider.GetRequiredService<TStore>());
         var clientName = HttpClientKey.For<TApi>();
+        services.AddSingleton<INovolisOAuthRefreshStoreBinding>(
+            new NovolisOAuthRefreshStoreBinding<TStore>(clientName));
         RegisterDPoPKey(services, clientName, credential.DPoPSigningKey);
         ConfigureClient<TApi>(
             services,
@@ -110,12 +113,51 @@ public static class NovolisOAuthClientServiceCollectionExtensions
         });
         services.TryAddSingleton<DPoPProofCreator>();
         services.TryAddSingleton<NovolisOAuthDiscovery>();
+        services.TryAddSingleton<NovolisOAuthRefreshStoreRegistry>();
         services.TryAddSingleton<NovolisOAuthTokenAcquirer>();
         var token = services.AddHttpClientFor<NovolisOAuthTokenApi>();
-        if (primaryHandler is not null)
+        if (primaryHandler is not null
+            && !services.Any(descriptor => descriptor.ServiceType == typeof(NovolisOAuthTokenPrimaryHandlerRegistered)))
         {
             token.ConfigurePrimaryHttpMessageHandler(() => primaryHandler);
+            services.AddSingleton(new NovolisOAuthTokenPrimaryHandlerRegistered());
         }
+    }
+
+    private static void EnsureClientKey<TApi>()
+        where TApi : OAuthClientKey, new()
+    {
+        if (typeof(TApi) == typeof(OAuthClientKey))
+        {
+            throw new InvalidOperationException("OAuthClientKey cannot be used as a client key.");
+        }
+    }
+
+    private static bool IsStoreRegistered<TStore>(IServiceCollection services)
+        where TStore : class, IRotatedRefreshTokenStore
+    {
+        foreach (var descriptor in services)
+        {
+            if (descriptor.ServiceType == typeof(TStore)
+                || descriptor.ImplementationType == typeof(TStore)
+                || descriptor.ImplementationInstance is TStore)
+            {
+                return true;
+            }
+
+            if (descriptor.ServiceType != typeof(IRotatedRefreshTokenStore))
+            {
+                continue;
+            }
+
+            var implemented = descriptor.ImplementationType ?? descriptor.ImplementationInstance?.GetType();
+            if (implemented is null || typeof(TStore).IsAssignableFrom(implemented))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void ConfigureClient<TApi>(

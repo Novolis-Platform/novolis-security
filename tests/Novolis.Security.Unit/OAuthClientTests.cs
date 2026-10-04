@@ -213,6 +213,216 @@ public sealed class OAuthClientTests
     }
 
     [Test]
+    public async Task Two_refresh_clients_use_their_own_stores()
+    {
+        var warehouse = new MemoryRefreshStore();
+        var billing = new BillingRefreshStore();
+        await warehouse.SetAsync(HttpClientKey.For<WarehouseApi>(), "warehouse-refresh");
+        await billing.SetAsync(HttpClientKey.For<BillingApi>(), "billing-refresh");
+        var handler = new StubHandler
+        {
+            SendAsyncImpl = async (request, _) =>
+            {
+                if (request.RequestUri!.AbsolutePath != "/oauth/token")
+                {
+                    return new HttpResponseMessage(HttpStatusCode.OK);
+                }
+
+                var form = await request.Content!.ReadAsStringAsync();
+                if (form.Contains("warehouse-refresh", StringComparison.Ordinal))
+                {
+                    return JsonOk("""{"access_token":"w1","refresh_token":"warehouse-rotated","expires_in":3600}""");
+                }
+
+                if (form.Contains("billing-refresh", StringComparison.Ordinal))
+                {
+                    return JsonOk("""{"access_token":"b1","refresh_token":"billing-rotated","expires_in":3600}""");
+                }
+
+                return Json("""{"error":"invalid_grant"}""", HttpStatusCode.BadRequest);
+            },
+        };
+
+        var services = new ServiceCollection();
+        services.AddSingleton(warehouse);
+        services.AddSingleton(billing);
+        services.AddNovolisOAuthClient<WarehouseApi, MemoryRefreshStore>(
+            new Uri("https://warehouse.example/"),
+            RefreshCredential.Confidential(
+                new Uri("https://login.example/"),
+                "warehouse",
+                "secret",
+                "warehouse.read",
+                new Uri("https://login.example/oauth/token")),
+            handler);
+        services.AddNovolisOAuthClient<BillingApi, BillingRefreshStore>(
+            new Uri("https://billing.example/"),
+            RefreshCredential.Confidential(
+                new Uri("https://login.example/"),
+                "billing",
+                "secret",
+                "billing.read",
+                new Uri("https://login.example/oauth/token")),
+            handler);
+        await using var provider = services.BuildServiceProvider();
+        using var warehouseResponse = await provider.GetRequiredService<INovolisOAuthRefreshClient<WarehouseApi>>()
+            .SendAsync(new HttpRequestMessage(HttpMethod.Get, "items"));
+        using var billingResponse = await provider.GetRequiredService<INovolisOAuthRefreshClient<BillingApi>>()
+            .SendAsync(new HttpRequestMessage(HttpMethod.Get, "invoices"));
+
+        await Assert.That(warehouseResponse.IsSuccessStatusCode).IsTrue();
+        await Assert.That(billingResponse.IsSuccessStatusCode).IsTrue();
+        await Assert.That(await warehouse.GetAsync(HttpClientKey.For<WarehouseApi>())).IsEqualTo("warehouse-rotated");
+        await Assert.That(await billing.GetAsync(HttpClientKey.For<BillingApi>())).IsEqualTo("billing-rotated");
+        await Assert.That(await warehouse.GetAsync(HttpClientKey.For<BillingApi>())).IsNull();
+        await Assert.That(await billing.GetAsync(HttpClientKey.For<WarehouseApi>())).IsNull();
+    }
+
+    [Test]
+    public async Task RefreshRegistration_accepts_interface_store_registration()
+    {
+        var store = new MemoryRefreshStore();
+        await store.SetAsync(HttpClientKey.For<WarehouseApi>(), "iface-refresh");
+        var handler = new StubHandler
+        {
+            SendAsyncImpl = (request, _) =>
+            {
+                if (request.RequestUri!.AbsolutePath == "/oauth/token")
+                {
+                    return Task.FromResult(JsonOk("""{"access_token":"token","refresh_token":"rotated","expires_in":3600}"""));
+                }
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            },
+        };
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IRotatedRefreshTokenStore>(store);
+        services.AddNovolisOAuthClient<WarehouseApi, MemoryRefreshStore>(
+            new Uri("https://warehouse.example/"),
+            RefreshCredential.Confidential(
+                new Uri("https://login.example/"),
+                "warehouse",
+                "secret",
+                "warehouse.read",
+                new Uri("https://login.example/oauth/token")),
+            handler);
+        await using var provider = services.BuildServiceProvider();
+        using var response = await provider.GetRequiredService<INovolisOAuthRefreshClient<WarehouseApi>>()
+            .SendAsync(new HttpRequestMessage(HttpMethod.Get, "items"));
+
+        await Assert.That(response.IsSuccessStatusCode).IsTrue();
+        await Assert.That(await store.GetAsync(HttpClientKey.For<WarehouseApi>())).IsEqualTo("rotated");
+    }
+
+    [Test]
+    public async Task DPoP_factories_reject_non_p256_keys()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        await Assert.That(() => ClientCredentialsCredential.DPoP(
+                new Uri("https://login.example/"),
+                "warehouse",
+                key,
+                "warehouse.read"))
+            .Throws<ArgumentException>();
+        await Assert.That(() => RefreshCredential.DPoP(
+                new Uri("https://login.example/"),
+                "warehouse",
+                key,
+                "warehouse.read"))
+            .Throws<ArgumentException>();
+    }
+
+    [Test]
+    public async Task OAuthClientKey_has_no_public_parameterless_constructor()
+    {
+        var ctor = typeof(OAuthClientKey).GetConstructor(Type.EmptyTypes);
+        await Assert.That(ctor).IsNull();
+    }
+
+    [Test]
+    public async Task Revoke_uses_discovery_when_token_endpoint_is_explicit()
+    {
+        var store = new MemoryRefreshStore();
+        await store.SetAsync(HttpClientKey.For<WarehouseApi>(), "to-revoke");
+        var handler = new StubHandler
+        {
+            SendAsyncImpl = (request, _) =>
+            {
+                if (request.RequestUri!.AbsolutePath.Contains(".well-known", StringComparison.Ordinal))
+                {
+                    return Task.FromResult(JsonOk(
+                        """{"token_endpoint":"https://login.example/oauth/token","revocation_endpoint":"https://login.example/custom/revoke"}"""));
+                }
+
+                if (request.RequestUri.AbsolutePath == "/custom/revoke")
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+                }
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            },
+        };
+
+        var services = new ServiceCollection();
+        services.AddSingleton(store);
+        services.AddNovolisOAuthClient<WarehouseApi, MemoryRefreshStore>(
+            new Uri("https://warehouse.example/"),
+            RefreshCredential.Confidential(
+                new Uri("https://login.example/"),
+                "warehouse",
+                "secret",
+                "warehouse.read",
+                new Uri("https://login.example/oauth/token")),
+            handler);
+        await using var provider = services.BuildServiceProvider();
+        await provider.GetRequiredService<INovolisOAuthRefreshClient<WarehouseApi>>()
+            .RevokeAsync("to-revoke", "refresh_token");
+
+        await Assert.That(handler.Sent.Any(request => request.RequestUri!.AbsolutePath == "/custom/revoke")).IsTrue();
+        await Assert.That(await store.GetAsync(HttpClientKey.For<WarehouseApi>())).IsNull();
+    }
+
+    [Test]
+    public async Task First_caller_cancel_does_not_fail_the_second_token_waiter()
+    {
+        var tokenCalls = 0;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new StubHandler
+        {
+            SendAsyncImpl = async (request, _) =>
+            {
+                if (request.RequestUri!.AbsolutePath == "/oauth/token")
+                {
+                    Interlocked.Increment(ref tokenCalls);
+                    await release.Task;
+                    return JsonOk("""{"access_token":"shared","expires_in":3600}""");
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            },
+        };
+
+        await using var provider = BuildConfidential(handler);
+        var api = provider.GetRequiredService<INovolisOAuthClient<WarehouseApi>>();
+        using var firstCts = new CancellationTokenSource();
+        var first = api.SendAsync(new HttpRequestMessage(HttpMethod.Get, "items"), firstCts.Token);
+        var second = api.SendAsync(new HttpRequestMessage(HttpMethod.Get, "items"));
+        while (Volatile.Read(ref tokenCalls) == 0)
+        {
+            await Task.Delay(10);
+        }
+
+        firstCts.Cancel();
+        release.SetResult();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => first);
+        using var response = await second;
+
+        await Assert.That(response.IsSuccessStatusCode).IsTrue();
+        await Assert.That(tokenCalls).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task TokenClient_has_no_resource_authorization_handler()
     {
         var handler = new StubHandler
@@ -269,6 +479,28 @@ public sealed class OAuthClientTests
     }
 
     public sealed class WarehouseApi() : OAuthClientKey;
+
+    public sealed class BillingApi() : OAuthClientKey;
+
+    public sealed class BillingRefreshStore : IRotatedRefreshTokenStore
+    {
+        private readonly Dictionary<string, string> _tokens = new(StringComparer.Ordinal);
+
+        public ValueTask<string?> GetAsync(string clientName, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(_tokens.TryGetValue(clientName, out var token) ? token : null);
+
+        public ValueTask SetAsync(string clientName, string refreshToken, CancellationToken cancellationToken = default)
+        {
+            _tokens[clientName] = refreshToken;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask ForgetAsync(string clientName, CancellationToken cancellationToken = default)
+        {
+            _tokens.Remove(clientName);
+            return ValueTask.CompletedTask;
+        }
+    }
 
     public sealed class MemoryRefreshStore : IRotatedRefreshTokenStore
     {

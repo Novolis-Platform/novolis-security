@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using Novolis.Http.Client;
 using Novolis.Security.OAuth;
 
@@ -15,7 +14,8 @@ internal sealed class NovolisOAuthTokenAcquirer(
     NovolisOAuthDPoPKeyRegistry keys,
     DPoPProofCreator proofs,
     TimeProvider time,
-    IServiceProvider services)
+    IServiceProvider services,
+    NovolisOAuthRefreshStoreRegistry stores)
 {
     private readonly ConcurrentDictionary<string, Lazy<Task<CachedOAuthAccessToken>>> _inflight = new(StringComparer.Ordinal);
 
@@ -37,10 +37,12 @@ internal sealed class NovolisOAuthTokenAcquirer(
         var lazy = _inflight.GetOrAdd(
             cacheKey,
             key => new Lazy<Task<CachedOAuthAccessToken>>(() =>
-                AcquireAsync(clientName, options, tokenEndpoint, key, cancellationToken)));
+                AcquireAsync(clientName, options, tokenEndpoint, key, CancellationToken.None)));
         try
         {
-            return await lazy.Value;
+            var token = await lazy.Value;
+            cancellationToken.ThrowIfCancellationRequested();
+            return token;
         }
         finally
         {
@@ -62,8 +64,7 @@ internal sealed class NovolisOAuthTokenAcquirer(
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
         ArgumentException.ThrowIfNullOrWhiteSpace(codeVerifier);
         ArgumentNullException.ThrowIfNull(redirectUri);
-        var store = services.GetService<IRotatedRefreshTokenStore>()
-            ?? throw new InvalidOperationException("A refresh-token store is required for authorization-code exchange.");
+        var store = Store(clientName);
         var tokenEndpoint = await discovery.ResolveTokenEndpointAsync(options, cancellationToken);
         var form = new Dictionary<string, string>
         {
@@ -129,7 +130,7 @@ internal sealed class NovolisOAuthTokenAcquirer(
         using var response = await client.SendAsync(message, cancellationToken);
         response.EnsureSuccessStatusCode();
         cache.Invalidate(clientName);
-        var store = services.GetService<IRotatedRefreshTokenStore>();
+        var store = TryStore(clientName);
         if (store is not null)
         {
             await store.ForgetAsync(clientName, cancellationToken);
@@ -146,8 +147,7 @@ internal sealed class NovolisOAuthTokenAcquirer(
         Dictionary<string, string> form;
         if (options.UseRefresh)
         {
-            var store = services.GetService<IRotatedRefreshTokenStore>()
-                ?? throw new InvalidOperationException("A refresh-token store is required for refresh registrations.");
+            var store = Store(clientName);
             var refreshToken = await store.GetAsync(clientName, cancellationToken);
             if (string.IsNullOrWhiteSpace(refreshToken))
             {
@@ -189,13 +189,9 @@ internal sealed class NovolisOAuthTokenAcquirer(
         }
 
         var response = await PostTokenAsync(options, clientName, tokenEndpoint, form, cancellationToken);
-        if (options.UseRefresh)
+        if (options.UseRefresh && !string.IsNullOrWhiteSpace(response.RefreshToken))
         {
-            var store = services.GetRequiredService<IRotatedRefreshTokenStore>();
-            if (!string.IsNullOrWhiteSpace(response.RefreshToken))
-            {
-                await store.SetAsync(clientName, response.RefreshToken, cancellationToken);
-            }
+            await Store(clientName).SetAsync(clientName, response.RefreshToken, cancellationToken);
         }
 
         return StoreAccessToken(clientName, options, tokenEndpoint, response);
@@ -232,7 +228,7 @@ internal sealed class NovolisOAuthTokenAcquirer(
         if (string.Equals(tokenResponse.Error, "invalid_grant", StringComparison.OrdinalIgnoreCase))
         {
             cache.Invalidate(clientName);
-            var store = services.GetService<IRotatedRefreshTokenStore>();
+            var store = TryStore(clientName);
             if (store is not null)
             {
                 await store.ForgetAsync(clientName, cancellationToken);
@@ -300,4 +296,10 @@ internal sealed class NovolisOAuthTokenAcquirer(
             message.Headers.Authorization = new AuthenticationHeaderValue("DPoP", accessToken);
         }
     }
+
+    private IRotatedRefreshTokenStore Store(string clientName) =>
+        stores.Get(clientName, services);
+
+    private IRotatedRefreshTokenStore? TryStore(string clientName) =>
+        stores.Contains(clientName) ? stores.Get(clientName, services) : null;
 }

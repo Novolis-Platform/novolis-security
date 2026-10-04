@@ -10,6 +10,7 @@
     <LibraryReference Include="Novolis.Storage.Abstractions" />
     <LibraryReference Include="Novolis.Storage.InMemory" />
     <PackageReference Include="TUnit" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="OAuthClientTests.cs" />
