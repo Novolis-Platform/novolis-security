@@ -187,6 +187,42 @@ public class AuthenticationIsolationTests
     }
 
     [Test]
+    public async Task SignIn_RevokesOtherSessions_ByDefault()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        var authentication = provider.GetRequiredService<IAuthenticationService>();
+        var first = await authentication.RegisterAsync("frank", "correct horse");
+        var second = await authentication.SignInAsync("frank", "correct horse");
+        await Assert.That(second.Succeeded).IsTrue();
+        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(first.SessionId!)).IsNull();
+        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(second.SessionId!))
+            .IsEqualTo(first.IdentityId);
+    }
+
+    [Test]
+    public async Task SignIn_KeepsOtherSessions_WhenRevokeIsOff()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<PasswordHasherOptions>(OAuthTestHost.FastArgon);
+        services.AddSingleton<IPasswordBreachChecker>(_ => AllowingPasswordBreachChecker.Instance);
+        services.AddNovolisAuthentication(o =>
+        {
+            o.IsDevelopment = true;
+            o.RevokeOtherSessionsOnSignIn = false;
+        });
+        await using var provider = services.BuildServiceProvider();
+        var authentication = provider.GetRequiredService<IAuthenticationService>();
+        var first = await authentication.RegisterAsync("frank", "correct horse");
+        var second = await authentication.SignInAsync("frank", "correct horse");
+        await Assert.That(second.Succeeded).IsTrue();
+        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(first.SessionId!))
+            .IsEqualTo(first.IdentityId);
+        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(second.SessionId!))
+            .IsEqualTo(first.IdentityId);
+    }
+
+    [Test]
     public async Task ChangePassword_RequiresCurrentPassword_ThenAcceptsOnlyTheNewSecret()
     {
         await using var provider = OAuthTestHost.CreateProvider();

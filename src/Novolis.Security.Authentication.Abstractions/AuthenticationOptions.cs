@@ -9,6 +9,12 @@ public sealed class AuthenticationOptions
     /// <summary>Whether a sign-in creates a browser session by default.</summary>
     public bool CreateSessionByDefault { get; set; } = true;
 
+    /// <summary>
+    /// When true, a successful sign-in ends every other session for that identity.
+    /// Password change and <c>RevokeGrantsAsync</c> still end every session.
+    /// </summary>
+    public bool RevokeOtherSessionsOnSignIn { get; set; } = true;
+
     /// <summary>Minimum password length accepted by <c>RegisterAsync</c>. Values below 8 are raised to 8.</summary>
     public int MinimumPasswordLength { get; set; } = 8;
 

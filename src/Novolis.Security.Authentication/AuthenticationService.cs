@@ -418,11 +418,14 @@ public sealed class AuthenticationService : IAuthenticationService
                 now.ToUnixTimeSeconds(),
                 _options.SessionLifetime,
                 cancellationToken).ConfigureAwait(false);
-            await _sessions.RevokeAllForIdentityAsync(
-                identity.Id,
-                now,
-                session.SessionId,
-                cancellationToken).ConfigureAwait(false);
+            if (_options.RevokeOtherSessionsOnSignIn)
+            {
+                await _sessions.RevokeAllForIdentityAsync(
+                    identity.Id,
+                    now,
+                    session.SessionId,
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             await ObserveAsync(
                 AuthenticationEventTypes.SessionCreated,
