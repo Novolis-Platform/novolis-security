@@ -23,6 +23,6 @@
     <PackageVersion Include="Novolis.Storage.Sqlite" Version="2026.1.*" />
     <PackageVersion Include="Novolis.Http.Client" Version="2026.1.*" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.1.0" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
   </ItemGroup>
 </Project>
