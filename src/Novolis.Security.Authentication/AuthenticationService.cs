@@ -100,6 +100,46 @@ public sealed class AuthenticationService : IAuthenticationService
     }
 
     /// <inheritdoc />
+    public async ValueTask<SignInResult> SignInExternalAsync(
+        IdentityId identityId,
+        bool createSession = true,
+        CancellationToken cancellationToken = default)
+    {
+        var identity = await _identities.TryGetAsync(identityId, cancellationToken).ConfigureAwait(false);
+        if (identity is null || identity.Disabled)
+        {
+            await ObserveAsync(
+                AuthenticationEventTypes.SignInFailed,
+                identityId,
+                "external",
+                "identity_unavailable",
+                cancellationToken).ConfigureAwait(false);
+            return SignInResult.Fail("identity_unavailable");
+        }
+
+        var credential = await _credentials.TryGetAsync(identity.CredentialReference, cancellationToken)
+            .ConfigureAwait(false);
+        if (credential is null)
+        {
+            await ObserveAsync(
+                AuthenticationEventTypes.SignInFailed,
+                identityId,
+                "external",
+                "credential_unavailable",
+                cancellationToken).ConfigureAwait(false);
+            return SignInResult.Fail("credential_unavailable");
+        }
+
+        return await FinishSignInAsync(
+            identity,
+            credential,
+            createSession,
+            requireMfa: false,
+            mfaProof: null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async ValueTask<SignInResult> RegisterAsync(
         string identifier,
         string password,

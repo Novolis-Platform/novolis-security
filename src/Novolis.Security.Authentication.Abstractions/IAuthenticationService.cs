@@ -15,6 +15,15 @@ public interface IAuthenticationService
         string? mfaProof = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Opens a browser session for an already-admitted identity after an external IdP (for example Microsoft Entra)
+    /// has validated the person. Does not verify a local password.
+    /// </summary>
+    ValueTask<SignInResult> SignInExternalAsync(
+        IdentityId identityId,
+        bool createSession = true,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Validates a browser session without guessing a tenant.</summary>
     ValueTask<IdentityId?> GetAuthenticatedIdentityAsync(
         string sessionId,

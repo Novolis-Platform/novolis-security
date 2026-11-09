@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Authentication.Entra</PackageId>
+    <Description>Microsoft Entra ID (OpenID Connect) interactive sign-in helpers for ASP.NET Core hosts. Hosts decide which Entra principals map to product users.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Authentication.Entra</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Novolis.Security.Unit" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+  </ItemGroup>
+</Project>

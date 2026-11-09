@@ -187,6 +187,21 @@ public class AuthenticationIsolationTests
     }
 
     [Test]
+    public async Task SignInExternal_OpensSessionWithoutPassword()
+    {
+        await using var provider = OAuthTestHost.CreateProvider();
+        var authentication = provider.GetRequiredService<IAuthenticationService>();
+        var registered = await authentication.RegisterAsync("frank", "correct horse", createSession: false);
+        await Assert.That(registered.Succeeded).IsTrue();
+
+        var external = await authentication.SignInExternalAsync(registered.IdentityId!.Value);
+        await Assert.That(external.Succeeded).IsTrue();
+        await Assert.That(external.SessionId).IsNotNull();
+        await Assert.That(await authentication.GetAuthenticatedIdentityAsync(external.SessionId!))
+            .IsEqualTo(registered.IdentityId);
+    }
+
+    [Test]
     public async Task SignIn_RevokesOtherSessions_ByDefault()
     {
         await using var provider = OAuthTestHost.CreateProvider();
