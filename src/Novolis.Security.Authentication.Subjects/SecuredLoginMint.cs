@@ -38,15 +38,13 @@ public sealed class SecuredLoginMint
         login.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Stable alphanumeric login shown to owners. Derived from a hash of the auth subject so
-    /// scheme flavor and raw identifiers never appear in the product surface.
+    /// Owner-facing mask for a secured subject. The auth subject is a one-way hash;
+    /// owners never see it — only <see cref="LoginDisplay.ObscuredLogin"/>.
     /// </summary>
-    public static string ToPublicLogin(string securedOrOpaqueSubject)
+    public static string ToPublicLogin(string? securedOrOpaqueSubject)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(securedOrOpaqueSubject);
-        var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(securedOrOpaqueSubject.Trim())))
-            .ToLowerInvariant();
-        return digest.Length <= 16 ? digest : digest[..16];
+        _ = securedOrOpaqueSubject;
+        return LoginDisplay.ObscuredLogin;
     }
 
     private string ResolvePepper()

@@ -88,8 +88,58 @@ public static class LoginSubjects
     }
 
     /// <summary>
-    /// Creates a secured Norwegian personnummer subject and an owner-facing login label.
-    /// The digits are not retained on the returned subject.
+    /// Creates a secured subject from an alphanumeric login the owner typed once.
+    /// The auth value is a one-way hash; <paramref name="ownerLogin"/> is always obscured.
+    /// </summary>
+    public static bool TryCreateSecuredAlphanumeric(
+        string? login,
+        SecuredLoginMint mint,
+        [NotNullWhen(true)] out LoginSubject? subject,
+        [NotNullWhen(true)] out string? ownerLogin,
+        [NotNullWhen(false)] out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(mint);
+        subject = null;
+        ownerLogin = null;
+        error = null;
+        if (!IsAlphanumericLogin(login))
+        {
+            error = "Enter an alphanumeric login.";
+            return false;
+        }
+
+        var normalized = login!.Trim().ToLowerInvariant();
+        // Prefer national-id normalisation when the value is a valid fødselsnummer.
+        var secured = NorwegianPersonNumber.TryNormalize(normalized, out var digits)
+            ? mint.Create(LoginDisplay.NorwegianPersonNumberScheme, digits)
+            : mint.Create(LoginDisplay.AlphanumericScheme, normalized);
+        subject = new LoginSubject(LoginSubjectKind.SecuredNationalId, secured);
+        ownerLogin = LoginDisplay.ObscuredLogin;
+        return true;
+    }
+
+    /// <summary>Whether a typed login is letters and digits only (no email shape).</summary>
+    public static bool IsAlphanumericLogin(string? login)
+    {
+        if (string.IsNullOrWhiteSpace(login))
+        {
+            return false;
+        }
+
+        var trimmed = login.Trim();
+        if (trimmed.Length is < 4 or > 128 || IsEmail(trimmed) || IsSecured(trimmed) ||
+            trimmed.StartsWith(OpenIdConnectPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return trimmed.All(char.IsLetterOrDigit);
+    }
+
+    private static bool IsSecured(string login) => SecuredLoginMint.IsSecured(login);
+
+    /// <summary>
+    /// Creates a secured Norwegian personnummer subject. Owner label is always obscured.
     /// </summary>
     public static bool TryCreateNorwegianPersonNumber(
         string? personNumber,
@@ -104,13 +154,13 @@ public static class LoginSubjects
         error = null;
         if (!NorwegianPersonNumber.TryNormalize(personNumber, out var digits))
         {
-            error = "Enter a valid 11-digit Norwegian personnummer.";
+            error = "Enter a valid alphanumeric login.";
             return false;
         }
 
         var secured = mint.Create(LoginDisplay.NorwegianPersonNumberScheme, digits);
         subject = new LoginSubject(LoginSubjectKind.SecuredNationalId, secured);
-        ownerLogin = SecuredLoginMint.ToPublicLogin(secured);
+        ownerLogin = LoginDisplay.ObscuredLogin;
         return true;
     }
 

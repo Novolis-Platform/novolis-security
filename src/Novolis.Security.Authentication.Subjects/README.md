@@ -1,8 +1,8 @@
 # Novolis.Security.Authentication.Subjects
 
-Product login subjects: **email** (default), **OpenID Connect**, and **secured** sensitive identifiers (for example national ids).
+Product login subjects: **email** (default), **OpenID Connect**, and **secured** alphanumeric identifiers.
 
-Hosts store the auth subject for sign-in. Instance owners only see email or a generic alphanumeric login from `SecuredLoginMint.ToPublicLogin` — never scheme flavor, HMAC prefixes, or raw national ids. This package is not an Identity Provider.
+Hosts store a one-way hashed auth subject for sign-in. Instance owners type alphanumeric once, then only see `********` — never the hash, scheme flavor, or raw secret. This package is not an Identity Provider.
 
 ## Install
 

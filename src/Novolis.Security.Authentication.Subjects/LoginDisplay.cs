@@ -1,16 +1,23 @@
 namespace Novolis.Security.Authentication.Subjects;
 
 /// <summary>
-/// Owner-facing login labels. Cryptographic subjects and national-id schemes stay internal;
-/// owners only see email or a generic alphanumeric login.
+/// Owner-facing login labels. Cryptographic subjects stay internal as one-way hashes;
+/// owners see either an email or an obscured mask — never the hash or scheme flavor.
 /// </summary>
 public static class LoginDisplay
 {
+    /// <summary>What owners see after a secured login is stored (one-way hash; not reversible).</summary>
+    public const string ObscuredLogin = "********";
+
     /// <summary>Internal scheme id for Norwegian personnummer secured subjects (never shown in UI).</summary>
     public const string NorwegianPersonNumberScheme = "no.fnr";
 
+    /// <summary>Internal scheme id for generic alphanumeric secured logins (never shown in UI).</summary>
+    public const string AlphanumericScheme = "login";
+
     /// <summary>
-    /// Builds the login an instance owner works with. Secured subjects become a short alphanumeric id.
+    /// Builds the login an instance owner works with after invite.
+    /// Secured subjects always become <see cref="ObscuredLogin"/>.
     /// </summary>
     public static string ForOwner(
         LoginSubjectKind kind,
@@ -18,7 +25,15 @@ public static class LoginDisplay
         string? storedSubject = null,
         string? ownerLogin = null)
     {
-        if (!string.IsNullOrWhiteSpace(ownerLogin))
+        if (kind == LoginSubjectKind.SecuredNationalId ||
+            SecuredLoginMint.IsSecured(storedSubject) ||
+            string.Equals(ownerLogin, ObscuredLogin, StringComparison.Ordinal))
+        {
+            return ObscuredLogin;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ownerLogin) &&
+            !SecuredLoginMint.IsSecured(ownerLogin))
         {
             return ownerLogin.Trim();
         }
@@ -27,15 +42,13 @@ public static class LoginDisplay
         {
             LoginSubjectKind.Email when LoginSubjects.IsEmail(rawInput)
                 => LoginSubjects.NormalizeEmail(rawInput!),
-            LoginSubjectKind.SecuredNationalId when !string.IsNullOrWhiteSpace(storedSubject)
-                => SecuredLoginMint.ToPublicLogin(storedSubject),
-            LoginSubjectKind.OpenIdConnect when !string.IsNullOrWhiteSpace(storedSubject)
-                => SecuredLoginMint.ToPublicLogin(storedSubject),
+            LoginSubjectKind.OpenIdConnect
+                => ObscuredLogin,
             _ => DescribeStored(storedSubject),
         };
     }
 
-    /// <summary>Describes a stored auth subject without revealing scheme flavor.</summary>
+    /// <summary>Describes a stored auth subject without revealing secrets or flavor.</summary>
     public static string DescribeStored(string? storedSubject)
     {
         if (string.IsNullOrWhiteSpace(storedSubject))
@@ -51,7 +64,7 @@ public static class LoginDisplay
         if (SecuredLoginMint.IsSecured(storedSubject) ||
             storedSubject.StartsWith(LoginSubjects.OpenIdConnectPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            return SecuredLoginMint.ToPublicLogin(storedSubject);
+            return ObscuredLogin;
         }
 
         return storedSubject;

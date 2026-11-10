@@ -15,10 +15,10 @@ public sealed class NorwegianPersonNumberTests
     }
 
     [Test]
-    public async Task SecuredMint_OwnerLoginIsAlphanumericWithoutFlavorOrDigits()
+    public async Task SecuredMint_OwnerSeesOnlyObscuredMask()
     {
         var mint = new SecuredLoginMint(new SecuredLoginOptions { Pepper = "unit-test-pepper" });
-        var ok = LoginSubjects.TryCreateNorwegianPersonNumber(
+        var ok = LoginSubjects.TryCreateSecuredAlphanumeric(
             ValidExample,
             mint,
             out var subject,
@@ -26,12 +26,9 @@ public sealed class NorwegianPersonNumberTests
             out _);
 
         await Assert.That(ok).IsTrue();
-        await Assert.That(subject!.Value).StartsWith("sec:no.fnr:");
+        await Assert.That(subject!.Value).StartsWith("sec:");
         await Assert.That(subject.Value).DoesNotContain(ValidExample);
-        await Assert.That(ownerLogin).IsNotNull();
-        await Assert.That(ownerLogin!.All(char.IsLetterOrDigit)).IsTrue();
-        await Assert.That(ownerLogin.Contains("person", StringComparison.OrdinalIgnoreCase)).IsFalse();
-        await Assert.That(ownerLogin.Contains("fnr", StringComparison.OrdinalIgnoreCase)).IsFalse();
-        await Assert.That(LoginDisplay.DescribeStored(subject.Value).All(char.IsLetterOrDigit)).IsTrue();
+        await Assert.That(ownerLogin).IsEqualTo(LoginDisplay.ObscuredLogin);
+        await Assert.That(LoginDisplay.DescribeStored(subject.Value)).IsEqualTo("********");
     }
 }
