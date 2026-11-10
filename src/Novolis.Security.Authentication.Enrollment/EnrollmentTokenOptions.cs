@@ -7,6 +7,12 @@ public sealed class EnrollmentTokenOptions
     public string? Pepper { get; set; }
 
     /// <summary>
+    /// Prior peppers kept only for verification during rotation.
+    /// New tokens always use <see cref="Pepper"/>.
+    /// </summary>
+    public IList<string> PreviousPeppers { get; set; } = [];
+
+    /// <summary>
     /// Fallback pepper used only when <see cref="AllowDevelopmentPepper"/> is true and <see cref="Pepper"/> is empty.
     /// </summary>
     public string DevelopmentPepper { get; set; } =
@@ -14,6 +20,9 @@ public sealed class EnrollmentTokenOptions
 
     /// <summary>Whether an empty <see cref="Pepper"/> may fall back to <see cref="DevelopmentPepper"/>.</summary>
     public bool AllowDevelopmentPepper { get; set; }
+
+    /// <summary>Minimum length required for production peppers.</summary>
+    public int MinimumPepperLength { get; set; } = 32;
 
     /// <summary>Relative path segment after the public origin (no leading slash), default <c>invite</c>.</summary>
     public string LinkPath { get; set; } = "invite";

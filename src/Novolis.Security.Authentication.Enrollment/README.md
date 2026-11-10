@@ -16,11 +16,14 @@ dotnet add package Novolis.Security.Authentication.Enrollment
 var mint = new EnrollmentTokenMint(new EnrollmentTokenOptions
 {
     Pepper = configuration["Enrollment:Pepper"],
+    PreviousPeppers = configuration.GetSection("Enrollment:PreviousPeppers").Get<string[]>() ?? [],
     AllowDevelopmentPepper = environment.IsDevelopment(),
     LinkPath = "invite",
 });
+mint.ValidateConfiguration();
 
 var reference = mint.CreateReference();
 var inviteUrl = mint.CreateLink("https://app.example", reference);
 var tokenHash = mint.HashToken(mint.CreateToken(reference));
+// Accept: HashTokenCandidates(token) / TryMatchTokenHash for rotation
 ```

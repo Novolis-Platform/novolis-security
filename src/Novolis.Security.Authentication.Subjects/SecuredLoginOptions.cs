@@ -6,6 +6,12 @@ public sealed class SecuredLoginOptions
     /// <summary>HMAC pepper. Required outside Development when development fallback is disabled.</summary>
     public string? Pepper { get; set; }
 
+    /// <summary>
+    /// Prior peppers kept only for verification during rotation.
+    /// New subjects always use <see cref="Pepper"/>.
+    /// </summary>
+    public IList<string> PreviousPeppers { get; set; } = [];
+
     /// <summary>Development-only fallback pepper.</summary>
     public string DevelopmentPepper { get; set; } =
         "novolis-development-secured-login-pepper-not-for-production";
@@ -15,4 +21,7 @@ public sealed class SecuredLoginOptions
 
     /// <summary>Purpose string bound into the HMAC.</summary>
     public string Purpose { get; set; } = "login/secured";
+
+    /// <summary>Minimum length required for production peppers (bytes as UTF-8 characters).</summary>
+    public int MinimumPepperLength { get; set; } = 32;
 }
