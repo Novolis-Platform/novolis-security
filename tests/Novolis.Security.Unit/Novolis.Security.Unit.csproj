@@ -28,6 +28,8 @@
     <ProjectReference Include="..\..\src\Novolis.Security.Authentication.AspNetCore\Novolis.Security.Authentication.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.Authentication.Storage\Novolis.Security.Authentication.Storage.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.Authentication.Entra\Novolis.Security.Authentication.Entra.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Authentication.Enrollment\Novolis.Security.Authentication.Enrollment.csproj" />
+    <ProjectReference Include="..\..\src\Novolis.Security.Authentication.Subjects\Novolis.Security.Authentication.Subjects.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.OAuth.Abstractions\Novolis.Security.OAuth.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.OAuth\Novolis.Security.OAuth.csproj" />
     <ProjectReference Include="..\..\src\Novolis.Security.OAuth.AspNetCore\Novolis.Security.OAuth.AspNetCore.csproj" />

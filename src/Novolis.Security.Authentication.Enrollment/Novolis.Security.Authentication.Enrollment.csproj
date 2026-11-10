@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Authentication.Enrollment</PackageId>
+    <Description>Opaque enrollment / invite tokens and product invite links. Hosts decide delivery (UI link, mail, or both). Not an Identity Provider.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Authentication.Enrollment</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Novolis.Security.Unit" />
+  </ItemGroup>
+</Project>

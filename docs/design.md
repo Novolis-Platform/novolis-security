@@ -34,7 +34,7 @@ Follow [library-boundaries](https://github.com/Novolis-Platform/novolis-governan
 - `Novolis.Security.HaveIBeenPwned`
 - `Novolis.Security.PasswordHashing`
 - `Novolis.Security.Secrets`
-- `Novolis.Security.Authentication.*`
+- `Novolis.Security.Authentication.*` (including `Enrollment` invite tokens/links and `Subjects` email/OIDC login keys; `Entra` for interactive Microsoft OIDC in hosts)
 - `Novolis.Security.OAuth.*`
 - `Novolis.Security.OAuth.Client` — outbound Novolis-issuer caller. One `AddNovolisOAuthClient<TApi>` registration per legal credential. Inject `INovolisOAuthClient<TApi>`. Refresh binds `TStore` to that client. Does not wrap `Novolis.Http.Authentication`.
 - `Novolis.Security.Authorization.*`

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Novolis.Security.Authentication.Subjects</PackageId>
+    <Description>Product login subjects: email (default) and OpenID Connect issuer+subject keys. Hosts map subjects onto identities; this is not an Identity Provider.</Description>
+    <IsPackable>true</IsPackable>
+    <RootNamespace>Novolis.Security.Authentication.Subjects</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Novolis.Security.Unit" />
+  </ItemGroup>
+</Project>
