@@ -22,7 +22,8 @@ public static class LoginSubjects
                at < trimmed.Length - 3 &&
                trimmed.IndexOf('.', at) > at + 1 &&
                !trimmed.Contains(' ', StringComparison.Ordinal) &&
-               !trimmed.StartsWith(OpenIdConnectPrefix, StringComparison.OrdinalIgnoreCase);
+               !trimmed.StartsWith(OpenIdConnectPrefix, StringComparison.OrdinalIgnoreCase) &&
+               !SecuredLoginMint.IsSecured(trimmed);
     }
 
     /// <summary>Normalizes an email for storage and comparison.</summary>
@@ -75,10 +76,42 @@ public static class LoginSubjects
                     NormalizeIssuer(issuer));
                 return true;
 
+            case LoginSubjectKind.SecuredNationalId:
+                error =
+                    "Secured national-id logins must be minted with SecuredLoginMint and NorwegianPersonNumber.";
+                return false;
+
             default:
                 error = "Unsupported login subject kind.";
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Creates a secured Norwegian personnummer subject and an owner-facing login label.
+    /// The digits are not retained on the returned subject.
+    /// </summary>
+    public static bool TryCreateNorwegianPersonNumber(
+        string? personNumber,
+        SecuredLoginMint mint,
+        [NotNullWhen(true)] out LoginSubject? subject,
+        [NotNullWhen(true)] out string? ownerLogin,
+        [NotNullWhen(false)] out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(mint);
+        subject = null;
+        ownerLogin = null;
+        error = null;
+        if (!NorwegianPersonNumber.TryNormalize(personNumber, out var digits))
+        {
+            error = "Enter a valid 11-digit Norwegian personnummer.";
+            return false;
+        }
+
+        var secured = mint.Create(LoginDisplay.NorwegianPersonNumberScheme, digits);
+        subject = new LoginSubject(LoginSubjectKind.SecuredNationalId, secured);
+        ownerLogin = SecuredLoginMint.ToPublicLogin(secured);
+        return true;
     }
 
     /// <summary>Parses a stored login string into a typed subject.</summary>
@@ -103,9 +136,15 @@ public static class LoginSubjects
                 NormalizeIssuer(issuer));
         }
 
+        if (SecuredLoginMint.IsSecured(trimmed))
+        {
+            return new LoginSubject(LoginSubjectKind.SecuredNationalId, trimmed);
+        }
+
         if (!IsEmail(trimmed))
         {
-            throw new FormatException("Login is neither a valid email nor an OpenID Connect key.");
+            throw new FormatException(
+                "Login is neither a valid email, OpenID Connect key, nor secured subject.");
         }
 
         return new LoginSubject(LoginSubjectKind.Email, NormalizeEmail(trimmed));

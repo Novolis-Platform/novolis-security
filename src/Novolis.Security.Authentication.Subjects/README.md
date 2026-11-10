@@ -1,8 +1,8 @@
 # Novolis.Security.Authentication.Subjects
 
-Product login subjects: **email** (default) and **OpenID Connect** issuer+subject keys.
+Product login subjects: **email** (default), **OpenID Connect**, and **secured** sensitive identifiers (for example national ids).
 
-Hosts store the normalized `LoginSubject.Value` on the product user row and admit external IdP principals by matching email or `oidc:{issuer}:{subject}`. This package is not an Identity Provider.
+Hosts store the auth subject for sign-in. Instance owners only see email or a generic alphanumeric login from `SecuredLoginMint.ToPublicLogin` — never scheme flavor, HMAC prefixes, or raw national ids. This package is not an Identity Provider.
 
 ## Install
 

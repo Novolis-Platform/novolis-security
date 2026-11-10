@@ -8,4 +8,10 @@ public enum LoginSubjectKind
 
     /// <summary>OpenID Connect issuer + subject (preferred when an external IdP is available).</summary>
     OpenIdConnect = 1,
+
+    /// <summary>
+    /// Sensitive national id turned into a one-way secured subject.
+    /// Owners see a masked login label; auth stores only the HMAC subject.
+    /// </summary>
+    SecuredNationalId = 2,
 }
